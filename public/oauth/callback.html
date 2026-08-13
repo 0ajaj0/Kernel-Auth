@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Signing in — KERNEL Auth</title>
+  <link rel="stylesheet" href="/assets/css/kernel.css" />
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="logo">KERNEL</div>
+    <h1 id="title">Completing sign-in</h1>
+    <p class="subtitle" id="subtitle">Returning you to KERNEL Loader…</p>
+    <div class="spinner" id="spinner"></div>
+    <div class="status-row">
+      <span class="status-dot"></span>
+      <span id="status">Verifying with provider</span>
+    </div>
+    <button class="btn btn-primary hidden" id="backBtn" type="button">Go back to KERNEL Loader</button>
+    <p class="error-text hidden" id="error"></p>
+    <p class="footer-note">Do not close this window until redirected.</p>
+  </div>
+  <script src="/assets/js/oauth-callback.js"></script>
+</body>
+</html>

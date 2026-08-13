@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — KERNEL Auth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/css/dashboard.css" />
+</head>
+<body>
+  <!-- Login -->
+  <div id="loginView" class="login-wrap">
+    <div class="login-card">
+      <div class="logo" style="font-size:10px;letter-spacing:.25em;color:var(--accent);font-weight:700">KERNEL</div>
+      <h1>Admin Dashboard</h1>
+      <p>Sign in with your admin password to manage licenses, users, and social auth.</p>
+      <div class="field">
+        <label>Admin Password</label>
+        <input type="password" id="loginPassword" placeholder="KERNEL_ADMIN_PASSWORD" autocomplete="current-password" />
+      </div>
+      <button class="btn btn-primary" id="loginBtn" style="width:100%">Sign In</button>
+      <p id="loginError" class="hidden" style="color:var(--danger);font-size:13px;margin-top:12px"></p>
+    </div>
+  </div>
+
+  <!-- App -->
+  <div id="appView" class="app hidden">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo">KERNEL</div>
+        <h2>Auth Panel</h2>
+      </div>
+      <nav class="nav" id="nav"></nav>
+      <div class="sidebar-footer">
+        <div id="siteStatus">● Online</div>
+        <button class="btn btn-ghost btn-sm" id="logoutBtn" style="width:100%;margin-top:8px">Sign Out</button>
+      </div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle">Dashboard</h1>
+          <div class="sub" id="pageSub">Overview of your auth platform</div>
+        </div>
+        <div id="topbarActions"></div>
+      </header>
+      <div class="content" id="pageContent"></div>
+    </div>
+  </div>
+
+  <div id="modalRoot"></div>
+  <div id="toastRoot"></div>
+
+  <script src="/assets/js/dashboard.js"></script>
+</body>
+</html>

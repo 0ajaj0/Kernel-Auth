@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KERNEL Auth</title>
+  <link rel="stylesheet" href="/assets/css/kernel.css" />
+</head>
+<body>
+  <div class="card">
+    <div class="logo">KERNEL</div>
+    <h1>KERNEL Auth</h1>
+    <p class="subtitle">Social sign-in and license gateway for KERNEL Loader. Host this on Netlify and connect your loader.</p>
+    <div class="status-row">
+      <span class="status-dot"></span>
+      <span id="status">Checking service…</span>
+    </div>
+    <a class="btn btn-primary" href="/dashboard/">Open Dashboard</a>
+    <a class="btn btn-ghost" href="/admin/">Legacy Admin</a>
+    <p class="footer-note">OAuth callback · License API · AuthlyX bridge</p>
+  </div>
+  <script>
+    fetch('/api/health')
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById('status').textContent = d.ok ? 'Service online' : 'Service unavailable';
+      })
+      .catch(() => {
+        document.getElementById('status').textContent = 'Deploy to Netlify to activate APIs';
+      });
+  </script>
+</body>
+</html>
