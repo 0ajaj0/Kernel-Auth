@@ -105,30 +105,208 @@
     selectedAppId = id;
     sessionStorage.setItem('kernel_selected_app', id);
     renderNav();
-    navigate(currentPage);
+    if (currentPage === 'applications') {
+      const site = config?.site_url || window.location.origin;
+      renderApplicationsTable(site);
+    } else {
+      navigate(currentPage);
+    }
   }
 
-  async function loadApps() {
-    apps = [];
+  async function loadApps(forceRefresh) {
+    if (forceRefresh) apps = [];
     const r1 = await api('applications');
-    if (r1.ok && Array.isArray(r1.data.apps) && r1.data.apps.length) {
+    if (r1.ok && Array.isArray(r1.data.apps)) {
       apps = r1.data.apps;
     } else if (r1.ok && r1.data.app) {
       apps = [r1.data.app];
-    } else {
+    } else if (!apps.length) {
       const r2 = await api('app-info');
       if (r2.ok && r2.data.app) {
         apps = [{ ...r2.data.app, id: r2.data.app.id || 'default' }];
       }
     }
-    if (!apps.length) {
-      apps = [];
-    }
     if (!apps.find((a) => a.id === selectedAppId)) {
-      selectedAppId = apps[0]?.id || 'default';
-      sessionStorage.setItem('kernel_selected_app', selectedAppId);
+      selectedAppId = apps[0]?.id || '';
+      if (selectedAppId) sessionStorage.setItem('kernel_selected_app', selectedAppId);
+      else sessionStorage.removeItem('kernel_selected_app');
     }
     return apps;
+  }
+
+  function renderApplicationsTable(site) {
+    pageContent.innerHTML = `
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Applications (${apps.length})</h3>
+          <span style="font-size:12px;color:var(--muted)">Unlimited apps — each project gets unique Owner ID + Secret</span>
+        </div>
+        <div class="panel-body">
+          <table>
+            <thead><tr><th>App Name</th><th>Owner ID</th><th>Version</th><th>Created</th><th></th></tr></thead>
+            <tbody id="appsTableBody">
+              ${apps.length ? apps.map((a) => `
+                <tr data-app-row="${esc(a.id)}">
+                  <td><strong>${esc(a.app_name)}</strong>${a.id === selectedAppId ? ' <span class="badge badge-accent">Active</span>' : ''}</td>
+                  <td><code style="font-size:11px">${esc(String(a.owner_id).slice(0, 8))}…</code></td>
+                  <td>${esc(a.version || '1.0')}</td>
+                  <td>${fmtDate(a.created_at)}</td>
+                  <td>
+                    <button class="btn btn-ghost btn-sm" data-use-app="${esc(a.id)}">Use</button>
+                    <button class="btn btn-ghost btn-sm" data-view-app="${esc(a.id)}">Credentials</button>
+                    <button class="btn btn-danger btn-sm" data-del-app="${esc(a.id)}">Delete</button>
+                  </td>
+                </tr>`).join('') : '<tr><td colspan="5" style="color:var(--muted);padding:20px">No applications yet. Click <strong>+ Create Application</strong>.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      ${renderSdkGuide(site)}`;
+    bindApplicationsEvents(site);
+  }
+
+  function renderSdkGuide(site) {
+    const app = selectedApp() || apps[0];
+    const q = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const owner = q(app?.owner_id || 'YOUR_OWNER_ID');
+    const name = q(app?.app_name || 'YOUR_APP_NAME');
+    const secret = q(app?.secret || 'YOUR_APP_SECRET');
+    const ver = q(app?.version || '1.0');
+    const apiBase = site + '/api';
+    const cppCode = `#include "KernelAuth.h"
+
+KernelAuth::KernelAuthClient auth(
+    "${owner}",
+    "${name}",
+    "${ver}",
+    "${secret}",
+    "${apiBase}"
+);
+
+if (!auth.Init()) {
+    // failed: auth.GetResponse().message
+    return;
+}
+
+// License key login
+auth.LicenseLogin("KERNEL-XXXX-XXXX");
+
+// OR username/password
+auth.Login("username", "password");`;
+
+    const csCode = `using KernelAuth;
+
+var auth = new KernelAuthClient(
+    "${owner}",
+    "${name}",
+    "${ver}",
+    "${secret}",
+    "${apiBase}");
+
+if (!await auth.InitAsync()) {
+    Console.WriteLine(auth.Response.Message);
+    return;
+}
+
+await auth.LicenseLoginAsync("KERNEL-XXXX-XXXX");
+// OR await auth.LoginAsync("username", "password");`;
+
+    return `
+      <div class="panel">
+        <div class="panel-head"><h3>SDK Integration Guide</h3></div>
+        <div class="panel-body sdk-guide">
+          <div class="sdk-steps">
+            <h4>Step 1 — Download SDK</h4>
+            <p>GitHub repo থেকে <code>sdk/</code> folder download করো:</p>
+            <div class="cred-box"><a href="https://github.com/0ajaj0/Kernel-Auth/tree/main/sdk" target="_blank" rel="noopener">github.com/0ajaj0/Kernel-Auth/tree/main/sdk</a></div>
+
+            <h4>Step 2 — Credentials</h4>
+            <p>উপরে app select করো → <strong>Credentials</strong> click → Owner ID + Secret copy করো।</p>
+
+            <h4>Step 3 — C++ Connect (Visual Studio)</h4>
+            <ol>
+              <li><code>sdk/cpp/include/KernelAuth.h</code> + <code>sdk/cpp/src/KernelAuth.cpp</code> project-এ add করো</li>
+              <li>Link: <code>winhttp.lib</code></li>
+              <li>নিচের code use করো (credentials auto-filled):</li>
+            </ol>
+            <div class="code-block"><pre>${esc(cppCode)}</pre><button class="btn btn-ghost btn-sm copy-btn" data-copy="${esc(cppCode)}">Copy C++</button></div>
+
+            <h4>Step 4 — C# Connect (.NET)</h4>
+            <ol>
+              <li><code>sdk/csharp/KernelAuth.cs</code> project-এ add করো</li>
+              <li><code>System.Net.Http</code> + <code>System.Text.Json</code> reference</li>
+              <li>নিচের code use করো:</li>
+            </ol>
+            <div class="code-block"><pre>${esc(csCode)}</pre><button class="btn btn-ghost btn-sm copy-btn" data-copy="${esc(csCode)}">Copy C#</button></div>
+
+            <h4>Step 5 — API Endpoints</h4>
+            <table style="font-size:12px;margin-top:8px">
+              <tr><td>Init</td><td><code>POST ${esc(apiBase)}/v2-init</code></td></tr>
+              <tr><td>Login</td><td><code>POST ${esc(apiBase)}/v2-login</code></td></tr>
+              <tr><td>License Activate</td><td><code>POST ${esc(apiBase)}/license-activate</code></td></tr>
+              <tr><td>OAuth Start</td><td><code>GET ${esc(site)}/api/oauth-start?provider=google</code></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function bindApplicationsEvents(site) {
+    $('#createAppBtn').onclick = () => {
+      showModal(`
+        <div class="modal">
+          <h2>Create Application</h2>
+          <div class="field"><label>App Name</label><input id="mAppName" placeholder="My Cheat / My Loader" /></div>
+          <div class="field"><label>Version</label><input id="mAppVersion" value="1.0" /></div>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" data-close>Cancel</button>
+            <button class="btn btn-primary" id="mCreateApp">Create</button>
+          </div>
+        </div>`);
+      $('#mCreateApp').onclick = async () => {
+        const { ok, data: d } = await api('applications', {
+          method: 'POST',
+          body: JSON.stringify({
+            app_name: $('#mAppName').value,
+            version: $('#mAppVersion').value,
+          }),
+        });
+        if (!ok) return toast(d.error || 'Failed to create app', 'error');
+        toast('Application created');
+        modalRoot.innerHTML = '';
+        apps.push(d.app);
+        setSelectedApp(d.app.id);
+      };
+    };
+
+    pageContent.querySelectorAll('[data-use-app]').forEach((b) => {
+      b.onclick = () => { setSelectedApp(b.dataset.useApp); toast('Active app updated'); };
+    });
+
+    pageContent.querySelectorAll('[data-view-app]').forEach((b) => {
+      b.onclick = () => showAppCredentials(b.dataset.viewApp, site);
+    });
+
+    pageContent.querySelectorAll('[data-del-app]').forEach((b) => {
+      b.onclick = async () => {
+        const id = b.dataset.delApp;
+        if (!confirm('Delete this application?')) return;
+        const { ok, data: d } = await api('applications?id=' + encodeURIComponent(id), { method: 'DELETE' });
+        if (!ok) return toast(d.error || 'Delete failed', 'error');
+        apps = apps.filter((a) => a.id !== id);
+        if (selectedAppId === id) {
+          selectedAppId = apps[0]?.id || '';
+          if (selectedAppId) sessionStorage.setItem('kernel_selected_app', selectedAppId);
+          else sessionStorage.removeItem('kernel_selected_app');
+        }
+        toast('Application deleted');
+        renderApplicationsTable(site);
+      };
+    });
+
+    pageContent.querySelectorAll('[data-copy]').forEach((btn) => {
+      btn.onclick = () => copyText(btn.dataset.copy);
+    });
   }
 
   function renderAppSelector() {
@@ -272,100 +450,8 @@
         if (cfg.ok) config = cfg.data;
       }
       site = config?.site_url || window.location.origin;
-      await loadApps();
-    } catch (err) {
-      apps = [{
-        id: 'default',
-        app_name: 'KERNEL Loader',
-        owner_id: 'Error',
-        version: '1.0',
-        secret: '—',
-        created_at: new Date().toISOString(),
-      }];
-    }
-
-    try {
-      pageContent.innerHTML = `
-        <div class="panel">
-          <div class="panel-head">
-            <h3>Applications (${apps.length})</h3>
-            <span style="font-size:12px;color:var(--muted)">Unlimited apps — each project gets unique Owner ID + Secret</span>
-          </div>
-          <div class="panel-body">
-            <table>
-              <thead><tr><th>App Name</th><th>Owner ID</th><th>Version</th><th>Created</th><th></th></tr></thead>
-              <tbody>
-                ${apps.length ? apps.map((a) => `
-                  <tr>
-                    <td><strong>${esc(a.app_name)}</strong>${a.id === selectedAppId ? ' <span class="badge badge-accent">Active</span>' : ''}</td>
-                    <td><code style="font-size:11px">${esc(a.owner_id.slice(0, 8))}…</code></td>
-                    <td>${esc(a.version || '1.0')}</td>
-                    <td>${fmtDate(a.created_at)}</td>
-                    <td>
-                      <button class="btn btn-ghost btn-sm" data-use-app="${esc(a.id)}">Use</button>
-                      <button class="btn btn-ghost btn-sm" data-view-app="${esc(a.id)}">Credentials</button>
-                      <button class="btn btn-danger btn-sm" data-del-app="${esc(a.id)}">Delete</button>
-                    </td>
-                  </tr>`).join('') : '<tr><td colspan="5" style="color:var(--muted);padding:20px">No applications yet. Click <strong>+ Create Application</strong>.</td></tr>'}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div class="panel" id="appDetailPanel">
-          <div class="panel-head"><h3>Integration Guide</h3></div>
-          <div class="panel-body" style="padding:20px;font-size:13px;color:var(--muted)">
-            Select an app and click <strong>Credentials</strong> to copy Owner ID + Secret for your loader/project SDK.
-            Users and license keys you create will belong to the currently active app.
-          </div>
-        </div>`;
-
-      $('#createAppBtn').onclick = () => {
-        showModal(`
-          <div class="modal">
-            <h2>Create Application</h2>
-            <div class="field"><label>App Name</label><input id="mAppName" placeholder="My Cheat / My Loader" /></div>
-            <div class="field"><label>Version</label><input id="mAppVersion" value="1.0" /></div>
-            <div class="modal-actions">
-              <button class="btn btn-ghost" data-close>Cancel</button>
-              <button class="btn btn-primary" id="mCreateApp">Create</button>
-            </div>
-          </div>`);
-        $('#mCreateApp').onclick = async () => {
-          const { ok, data: d } = await api('applications', {
-            method: 'POST',
-            body: JSON.stringify({
-              app_name: $('#mAppName').value,
-              version: $('#mAppVersion').value,
-            }),
-          });
-          if (!ok) return toast(d.error || 'Failed to create app', 'error');
-          toast('Application created');
-          modalRoot.innerHTML = '';
-          setSelectedApp(d.app.id);
-        };
-      };
-
-      pageContent.querySelectorAll('[data-use-app]').forEach((b) => {
-        b.onclick = () => { setSelectedApp(b.dataset.useApp); toast('Active app updated'); };
-      });
-
-      pageContent.querySelectorAll('[data-view-app]').forEach((b) => {
-        b.onclick = () => showAppCredentials(b.dataset.viewApp, site);
-      });
-
-      pageContent.querySelectorAll('[data-del-app]').forEach((b) => {
-        b.onclick = async () => {
-          if (!confirm('Delete this application? Users and keys for this app stay in storage until removed separately.')) return;
-          const { ok, data: d } = await api('applications?id=' + encodeURIComponent(b.dataset.delApp), { method: 'DELETE' });
-          if (!ok) return toast(d.error || 'Delete failed', 'error');
-          toast('Application deleted');
-          if (selectedAppId === b.dataset.delApp) {
-            selectedAppId = 'default';
-            sessionStorage.setItem('kernel_selected_app', 'default');
-          }
-          renderApplications();
-        };
-      });
+      await loadApps(true);
+      renderApplicationsTable(site);
     } catch (err) {
       showLoadError(err.message || 'Failed to load applications');
     }
