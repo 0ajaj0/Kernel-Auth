@@ -122,14 +122,7 @@
       }
     }
     if (!apps.length) {
-      apps = [{
-        id: 'default',
-        app_name: 'KERNEL Loader',
-        owner_id: 'Loading failed — click Retry',
-        version: '1.0',
-        secret: '—',
-        created_at: new Date().toISOString(),
-      }];
+      apps = [];
     }
     if (!apps.find((a) => a.id === selectedAppId)) {
       selectedAppId = apps[0]?.id || 'default';
@@ -302,7 +295,7 @@
             <table>
               <thead><tr><th>App Name</th><th>Owner ID</th><th>Version</th><th>Created</th><th></th></tr></thead>
               <tbody>
-                ${apps.map((a) => `
+                ${apps.length ? apps.map((a) => `
                   <tr>
                     <td><strong>${esc(a.app_name)}</strong>${a.id === selectedAppId ? ' <span class="badge badge-accent">Active</span>' : ''}</td>
                     <td><code style="font-size:11px">${esc(a.owner_id.slice(0, 8))}…</code></td>
@@ -313,7 +306,7 @@
                       <button class="btn btn-ghost btn-sm" data-view-app="${esc(a.id)}">Credentials</button>
                       <button class="btn btn-danger btn-sm" data-del-app="${esc(a.id)}">Delete</button>
                     </td>
-                  </tr>`).join('')}
+                  </tr>`).join('') : '<tr><td colspan="5" style="color:var(--muted);padding:20px">No applications yet. Click <strong>+ Create Application</strong>.</td></tr>'}
               </tbody>
             </table>
           </div>
@@ -411,15 +404,15 @@
           <div class="panel-head"><h3>Users (${users.length}) — ${esc(app?.app_name || 'App')}</h3></div>
         <div class="panel-body">
           <table>
-            <thead><tr><th>Username</th><th>Email</th><th>Provider</th><th>Subscription</th><th>Status</th><th>Created</th><th></th></tr></thead>
+            <thead><tr><th>Username</th><th>Email</th><th>Subscription</th><th>Expires</th><th>Status</th><th>Created</th><th></th></tr></thead>
             <tbody>
               ${users.length ? users.map((u) => `
                 <tr>
                   <td><strong>${esc(u.username)}</strong></td>
                   <td>${esc(u.email || '—')}</td>
-                  <td>${u.provider ? `<span class="badge badge-accent">${esc(u.provider)}</span>` : '—'}</td>
                   <td>${esc(u.subscription || 'Standard')}</td>
-                  <td>${u.banned ? '<span class="badge badge-danger">Banned</span>' : '<span class="badge badge-success">Active</span>'}</td>
+                  <td>${u.expires_at ? fmtDate(u.expires_at) : (u.duration_days ? u.duration_days + ' days' : 'Lifetime')}</td>
+                  <td>${u.banned ? '<span class="badge badge-danger">Banned</span>' : (u.expires_at && new Date(u.expires_at) < new Date() ? '<span class="badge badge-warn">Expired</span>' : '<span class="badge badge-success">Active</span>')}</td>
                   <td>${fmtDate(u.created_at)}</td>
                   <td>
                     <button class="btn btn-ghost btn-sm" data-ban="${esc(u.id)}" data-state="${u.banned ? '0' : '1'}">${u.banned ? 'Unban' : 'Ban'}</button>
@@ -439,6 +432,7 @@
           <div class="field"><label>Email</label><input id="mEmail" type="email" placeholder="user@email.com" /></div>
           <div class="field"><label>Password</label><input id="mPassword" type="password" placeholder="password" /></div>
           <div class="field"><label>Subscription</label><input id="mSub" value="Standard" /></div>
+          <div class="field"><label>Duration (days)</label><input id="mDuration" type="number" min="0" placeholder="0 = lifetime" value="30" /></div>
           <div class="modal-actions">
             <button class="btn btn-ghost" data-close>Cancel</button>
             <button class="btn btn-primary" id="mSaveUser">Create User</button>
@@ -453,6 +447,7 @@
             email: $('#mEmail').value,
             password: $('#mPassword').value,
             subscription: $('#mSub').value,
+            duration_days: Number($('#mDuration').value) || 0,
           }),
         });
         if (!ok) return toast(d.error || 'Failed', 'error');

@@ -60,23 +60,30 @@ async function ensureDefaultApp() {
 }
 
 async function getApp() {
-  return ensureDefaultApp();
+  const apps = await listApps();
+  return apps[0] || null;
 }
 
 async function listApps() {
-  await ensureDefaultApp();
   const s = await store('kernel-apps');
-  const index = await getJson(s, '__index__', { ids: ['default'] });
+  const index = await getJson(s, '__index__', { ids: [] });
   const apps = [];
+  const validIds = [];
   for (const id of index.ids) {
     const app = await getJson(s, id);
-    if (app) apps.push(app);
+    if (app) {
+      apps.push({ ...app, id: app.id || id });
+      validIds.push(app.id || id);
+    }
   }
-  return apps.length ? apps : [{ ...fallbackApp(), id: 'default' }];
+  if (validIds.length !== index.ids.length) {
+    await setJson(s, '__index__', { ids: validIds });
+  }
+  return apps;
 }
 
 async function getAppById(id) {
-  if (!id || id === 'default') return ensureDefaultApp();
+  if (!id) return null;
   const s = await store('kernel-apps');
   return getJson(s, id);
 }
@@ -110,13 +117,16 @@ async function createApp({ app_name, version = '1.0' }) {
 async function deleteApp(id) {
   if (!id) throw new Error('Missing application id');
   const s = await store('kernel-apps');
-  const existing = await getJson(s, id);
-  if (!existing) throw new Error('Application not found');
-  await s.delete(id);
   const index = await getJson(s, '__index__', { ids: [] });
+  const existing = await getJson(s, id);
+  const inIndex = index.ids.includes(id);
+  if (!existing && !inIndex) throw new Error('Application not found');
+  if (existing) {
+    await s.delete(id);
+    await appendLog({ type: 'app_deleted', app_id: id, app_name: existing.app_name });
+  }
   index.ids = index.ids.filter((item) => item !== id);
   await setJson(s, '__index__', index);
-  await appendLog({ type: 'app_deleted', app_id: id, app_name: existing.app_name });
 }
 
 function licenseBlobKey(appId, licenseKey) {

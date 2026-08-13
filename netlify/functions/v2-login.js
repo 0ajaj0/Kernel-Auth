@@ -56,20 +56,25 @@ exports.handler = async (event) => {
       if (!user || user.password_hash !== body.password || user.banned) {
         return json(401, { success: false, message: 'Invalid credentials' });
       }
+      if (user.expires_at && new Date(user.expires_at) < new Date()) {
+        return json(401, { success: false, message: 'Account expired' });
+      }
       user.last_login = new Date().toISOString();
       user.hwid = body.hwid || body.sid || user.hwid;
       await setJson(users, blobKey, user);
       await appendLog({ type: 'user_login', app_id: appId, username: user.username });
 
-      return json(200, {
-        success: true,
-        message: 'Login successful',
-        user: {
-          username: user.username,
-          email: user.email,
-          subscription: user.subscription,
-        },
-      });
+    return json(200, {
+      success: true,
+      message: 'Login successful',
+      user: {
+        username: user.username,
+        email: user.email,
+        subscription: user.subscription,
+        expiry_date: user.expires_at || '',
+        days_left: user.duration_days || 0,
+      },
+    });
     }
 
     return json(400, { success: false, message: 'Provide license_key or username+password' });

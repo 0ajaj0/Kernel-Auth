@@ -50,12 +50,19 @@ exports.handler = async (event) => {
       const username = body.username?.trim();
       const id = username?.toLowerCase() || crypto.randomUUID();
       const blobKey = userBlobKey(appId, id);
+      const durationDays = Number(body.duration_days) || 0;
+      let expiresAt = body.expires_at || null;
+      if (durationDays > 0) {
+        expiresAt = new Date(Date.now() + durationDays * 86400000).toISOString();
+      }
       const record = {
         app_id: appId,
         username: username || id,
         email: body.email || '',
         password_hash: body.password || '',
         subscription: body.subscription || 'Standard',
+        duration_days: durationDays || null,
+        expires_at: expiresAt,
         hwid: body.hwid || '',
         banned: false,
         created_at: new Date().toISOString(),
@@ -75,6 +82,11 @@ exports.handler = async (event) => {
       if (!existing) return json(404, { error: 'User not found' });
       if (typeof body.banned === 'boolean') existing.banned = body.banned;
       if (body.subscription) existing.subscription = body.subscription;
+      if (body.duration_days) {
+        existing.duration_days = Number(body.duration_days);
+        existing.expires_at = new Date(Date.now() + existing.duration_days * 86400000).toISOString();
+      }
+      if (body.expires_at) existing.expires_at = body.expires_at;
       await setJson(s, blobKey, existing);
       await appendLog({ type: 'user_updated', app_id: appId, id, banned: existing.banned });
       return json(200, { ok: true, user: { id, ...existing } });
