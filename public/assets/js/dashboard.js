@@ -311,7 +311,7 @@
                     <td>
                       <button class="btn btn-ghost btn-sm" data-use-app="${esc(a.id)}">Use</button>
                       <button class="btn btn-ghost btn-sm" data-view-app="${esc(a.id)}">Credentials</button>
-                      ${a.id !== 'default' ? `<button class="btn btn-danger btn-sm" data-del-app="${esc(a.id)}">Delete</button>` : ''}
+                      <button class="btn btn-danger btn-sm" data-del-app="${esc(a.id)}">Delete</button>
                     </td>
                   </tr>`).join('')}
               </tbody>
@@ -362,11 +362,14 @@
 
       pageContent.querySelectorAll('[data-del-app]').forEach((b) => {
         b.onclick = async () => {
-          if (!confirm('Delete this application?')) return;
+          if (!confirm('Delete this application? Users and keys for this app stay in storage until removed separately.')) return;
           const { ok, data: d } = await api('applications?id=' + encodeURIComponent(b.dataset.delApp), { method: 'DELETE' });
           if (!ok) return toast(d.error || 'Delete failed', 'error');
           toast('Application deleted');
-          if (selectedAppId === b.dataset.delApp) selectedAppId = 'default';
+          if (selectedAppId === b.dataset.delApp) {
+            selectedAppId = 'default';
+            sessionStorage.setItem('kernel_selected_app', 'default');
+          }
           renderApplications();
         };
       });

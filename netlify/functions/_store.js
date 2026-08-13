@@ -1,7 +1,7 @@
 const { getStore } = require('@netlify/blobs');
 
 async function store(name) {
-  return getStore({ name, consistency: 'strong' });
+  return getStore({ name });
 }
 
 function fallbackApp() {
@@ -108,7 +108,7 @@ async function createApp({ app_name, version = '1.0' }) {
 }
 
 async function deleteApp(id) {
-  if (id === 'default') throw new Error('Cannot delete the default application');
+  if (!id) throw new Error('Missing application id');
   const s = await store('kernel-apps');
   const existing = await getJson(s, id);
   if (!existing) throw new Error('Application not found');
