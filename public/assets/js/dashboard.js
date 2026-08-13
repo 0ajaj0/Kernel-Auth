@@ -109,10 +109,28 @@
   }
 
   async function loadApps() {
-    const { ok, data } = await api('applications');
-    if (!ok) throw new Error(data.error || 'Failed to load applications');
-    apps = data.apps || [];
-    if (!apps.length) apps = [data.app].filter(Boolean);
+    apps = [];
+    const r1 = await api('applications');
+    if (r1.ok && Array.isArray(r1.data.apps) && r1.data.apps.length) {
+      apps = r1.data.apps;
+    } else if (r1.ok && r1.data.app) {
+      apps = [r1.data.app];
+    } else {
+      const r2 = await api('app-info');
+      if (r2.ok && r2.data.app) {
+        apps = [{ ...r2.data.app, id: r2.data.app.id || 'default' }];
+      }
+    }
+    if (!apps.length) {
+      apps = [{
+        id: 'default',
+        app_name: 'KERNEL Loader',
+        owner_id: 'Loading failed — click Retry',
+        version: '1.0',
+        secret: '—',
+        created_at: new Date().toISOString(),
+      }];
+    }
     if (!apps.find((a) => a.id === selectedAppId)) {
       selectedAppId = apps[0]?.id || 'default';
       sessionStorage.setItem('kernel_selected_app', selectedAppId);
@@ -253,10 +271,27 @@
   /* ── Applications ── */
   async function renderApplications() {
     topbarActions.innerHTML = `<button class="btn btn-primary btn-sm" id="createAppBtn">+ Create Application</button>`;
-    pageContent.innerHTML = '<p style="color:var(--muted)">Loading…</p>';
+    pageContent.innerHTML = '<p style="color:var(--muted)">Loading applications…</p>';
+    let site = window.location.origin;
     try {
+      if (!config) {
+        const cfg = await api('config');
+        if (cfg.ok) config = cfg.data;
+      }
+      site = config?.site_url || window.location.origin;
       await loadApps();
-      const site = config?.site_url || window.location.origin;
+    } catch (err) {
+      apps = [{
+        id: 'default',
+        app_name: 'KERNEL Loader',
+        owner_id: 'Error',
+        version: '1.0',
+        secret: '—',
+        created_at: new Date().toISOString(),
+      }];
+    }
+
+    try {
       pageContent.innerHTML = `
         <div class="panel">
           <div class="panel-head">

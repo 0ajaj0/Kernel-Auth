@@ -1,9 +1,11 @@
 [build]
   publish = "public"
   functions = "netlify/functions"
+  command = "npm install --omit=dev"
 
 [functions]
   node_bundler = "esbuild"
+  external_node_modules = ["@netlify/blobs"]
 
 [[redirects]]
   from = "/api/*"
