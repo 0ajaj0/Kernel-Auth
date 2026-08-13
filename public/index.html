@@ -3,31 +3,148 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KERNEL Auth</title>
-  <link rel="stylesheet" href="/assets/css/kernel.css" />
+  <title>KERNEL Auth — Software Licensing, Done Right</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #080b10; --panel: #0f1419; --border: rgba(255,255,255,0.06);
+      --text: #e8eaed; --muted: #8b949e; --blue: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    a { color: inherit; text-decoration: none; }
+
+    .nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 40px; background: rgba(8,11,16,0.85); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; }
+    .nav-logo {
+      width: 36px; height: 36px; background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+      border-radius: 10px; display: flex; align-items: center; justify-content: center;
+    }
+    .nav-links { display: flex; gap: 8px; align-items: center; }
+    .nav-links a { padding: 8px 14px; color: var(--muted); font-size: 14px; border-radius: 8px; }
+    .nav-links a:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px;
+      border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer; border: none;
+    }
+    .btn-primary { background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; box-shadow: 0 0 24px rgba(59,130,246,0.35); }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-ghost:hover { color: var(--text); }
+
+    .hero {
+      min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 120px 24px 80px;
+      background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(59,130,246,0.18), transparent);
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px;
+      border-radius: 999px; background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.25);
+      color: var(--blue); font-size: 13px; font-weight: 600; margin-bottom: 24px;
+    }
+    .hero h1 { font-size: clamp(36px, 6vw, 64px); font-weight: 800; line-height: 1.1; max-width: 800px; }
+    .hero h1 span { background: linear-gradient(135deg, #60a5fa, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero p { color: var(--muted); font-size: 18px; max-width: 560px; margin: 20px auto 36px; line-height: 1.6; }
+    .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+    .section { padding: 80px 40px; max-width: 1100px; margin: 0 auto; }
+    .section h2 { font-size: 32px; font-weight: 700; text-align: center; margin-bottom: 12px; }
+    .section > p { text-align: center; color: var(--muted); margin-bottom: 48px; }
+    .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .feature-card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 28px;
+    }
+    .feature-card .icon { font-size: 28px; margin-bottom: 16px; }
+    .feature-card h3 { font-size: 18px; margin-bottom: 8px; }
+    .feature-card p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+    .pricing { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .price-card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 32px;
+    }
+    .price-card.featured { border-color: rgba(59,130,246,0.4); box-shadow: 0 0 40px rgba(59,130,246,0.15); }
+    .price-card h3 { font-size: 20px; margin-bottom: 8px; }
+    .price-card .price { font-size: 40px; font-weight: 800; margin: 16px 0; }
+    .price-card .price span { font-size: 16px; color: var(--muted); font-weight: 500; }
+    .price-card ul { list-style: none; margin: 20px 0; }
+    .price-card li { padding: 8px 0; color: var(--muted); font-size: 14px; border-bottom: 1px solid var(--border); }
+    .price-card li::before { content: '✓ '; color: var(--blue); }
+
+    footer {
+      border-top: 1px solid var(--border); padding: 40px; text-align: center; color: var(--muted); font-size: 13px;
+    }
+
+    @media (max-width: 900px) {
+      .features, .pricing { grid-template-columns: 1fr; }
+      .nav { padding: 16px 20px; }
+      .nav-links a:not(.btn) { display: none; }
+    }
+  </style>
 </head>
 <body>
-  <div class="card">
-    <div class="logo">KERNEL</div>
-    <h1>KERNEL Auth</h1>
-    <p class="subtitle">Social sign-in and license gateway for KERNEL Loader. Host this on Netlify and connect your loader.</p>
-    <div class="status-row">
-      <span class="status-dot"></span>
-      <span id="status">Checking service…</span>
+  <nav class="nav">
+    <div class="nav-brand"><div class="nav-logo">K</div> KERNEL</div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+      <a href="/dashboard/">Login</a>
+      <a class="btn btn-primary" href="/dashboard/">Get Started</a>
     </div>
-    <a class="btn btn-primary" href="/dashboard/">Open Dashboard</a>
-    <a class="btn btn-ghost" href="/admin/">Legacy Admin</a>
-    <p class="footer-note">OAuth callback · License API · AuthlyX bridge</p>
-  </div>
-  <script>
-    fetch('/api/health')
-      .then(r => r.json())
-      .then(d => {
-        document.getElementById('status').textContent = d.ok ? 'Service online' : 'Service unavailable';
-      })
-      .catch(() => {
-        document.getElementById('status').textContent = 'Deploy to Netlify to activate APIs';
-      });
-  </script>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-badge">★ Social OAuth Built-In — Google, Discord, GitHub</div>
+    <h1>Software Licensing, <span>Done Right</span></h1>
+    <p>KERNEL Auth is your all-in-one authentication and licensing platform. Manage users, licenses, devices, and subscriptions — with working social login your customers expect.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="/dashboard/">Get Started Free</a>
+      <a class="btn btn-ghost" href="#features">See Features</a>
+    </div>
+  </section>
+
+  <section class="section" id="features">
+    <h2>Everything AuthlyX has — and more</h2>
+    <p>Full dashboard with Apps, Users, Licenses, Devices, Policies, Settings, and Team management.</p>
+    <div class="features">
+      <div class="feature-card"><div class="icon">🔑</div><h3>License Management</h3><p>Generate, revoke, and track license keys with activation limits and expiry.</p></div>
+      <div class="feature-card"><div class="icon">🔗</div><h3>Social OAuth</h3><p>Google, Discord, and GitHub login — fully working for loader and dashboard.</p></div>
+      <div class="feature-card"><div class="icon">💻</div><h3>HWID / Device Lock</h3><p>Bind licenses to devices and manage HWID whitelist/blacklist policies.</p></div>
+      <div class="feature-card"><div class="icon">★</div><h3>Subscriptions</h3><p>Define subscription tiers with duration, pricing, and feature levels.</p></div>
+      <div class="feature-card"><div class="icon">🛡</div><h3>Access Policies</h3><p>IP, HWID, VPN, and country-based access control per application.</p></div>
+      <div class="feature-card"><div class="icon">📦</div><h3>SDK Ready</h3><p>C++ and C# SDKs included — connect your loader in minutes.</p></div>
+    </div>
+  </section>
+
+  <section class="section" id="pricing">
+    <h2>Simple Pricing</h2>
+    <p>Start free, scale as you grow. Each customer gets their own dashboard.</p>
+    <div class="pricing">
+      <div class="price-card">
+        <h3>Free</h3><div class="price">$0 <span>/mo</span></div>
+        <ul><li>1 Application</li><li>100 Users</li><li>Social OAuth</li><li>Basic Support</li></ul>
+        <a class="btn btn-ghost" href="/dashboard/" style="width:100%;justify-content:center">Start Free</a>
+      </div>
+      <div class="price-card featured">
+        <h3>Plus</h3><div class="price">$9 <span>/mo</span></div>
+        <ul><li>Unlimited Apps</li><li>Unlimited Licenses</li><li>Team Management</li><li>Priority Support</li></ul>
+        <a class="btn btn-primary" href="/dashboard/" style="width:100%;justify-content:center">Get Plus</a>
+      </div>
+      <div class="price-card">
+        <h3>Enterprise</h3><div class="price">Custom</div>
+        <ul><li>White-label</li><li>Reseller Panel</li><li>Custom Domain</li><li>24/7 Support</li></ul>
+        <a class="btn btn-ghost" href="/dashboard/" style="width:100%;justify-content:center">Contact Us</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>© 2026 KERNEL Auth — Built for developers who sell software.</p>
+    <p style="margin-top:8px"><a href="/dashboard/" style="color:var(--blue)">Dashboard</a> · <a href="https://github.com/0ajaj0/Kernel-Auth" style="color:var(--blue)">GitHub</a></p>
+  </footer>
 </body>
 </html>

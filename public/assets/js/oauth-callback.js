@@ -24,7 +24,9 @@
     errorEl.textContent = msg;
     errorEl.classList.remove('hidden');
     backBtn.classList.remove('hidden');
-    backBtn.onclick = () => { window.location.href = FOCUS_URL; };
+    backBtn.onclick = () => {
+      window.location.href = state && state.startsWith('dashboard-') ? '/dashboard/' : FOCUS_URL;
+    };
   }
 
   function redirectToLoader() {
@@ -40,10 +42,38 @@
     if (code) target.searchParams.set('code', code);
     if (state) target.searchParams.set('state', state);
 
-    // Give the loader a moment to show this success screen, then pass the code locally.
     setTimeout(() => {
       window.location.href = target.toString();
     }, 900);
+  }
+
+  async function completeDashboardLogin() {
+    title.textContent = 'Signing in to KERNEL Dashboard';
+    subtitle.textContent = 'Verifying your Google account…';
+    status.textContent = 'Exchanging authorization code';
+
+    try {
+      const res = await fetch('/api/dashboard-oauth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, provider: 'google', state }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Dashboard login failed');
+
+      sessionStorage.setItem('kernel_admin_token', data.token);
+      sessionStorage.setItem('kernel_user_profile', JSON.stringify(data.profile));
+
+      title.textContent = 'Welcome back!';
+      subtitle.textContent = data.profile.display_name || data.profile.email;
+      status.textContent = 'Redirecting to dashboard…';
+      spinner.classList.add('hidden');
+      setTimeout(() => {
+        window.location.href = '/dashboard/';
+      }, 600);
+    } catch (err) {
+      showError(err.message || 'Dashboard login failed');
+    }
   }
 
   if (error) {
@@ -53,6 +83,11 @@
 
   if (!code) {
     showError('No authorization code received from the provider.');
+    return;
+  }
+
+  if (state && state.startsWith('dashboard-')) {
+    completeDashboardLogin();
     return;
   }
 

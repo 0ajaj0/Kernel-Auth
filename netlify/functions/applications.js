@@ -1,5 +1,5 @@
 const { json, readJsonBody, initBlobs } = require('./_shared');
-const { listApps, getAppById, createApp, deleteApp, appendLog } = require('./_store');
+const { listApps, getAppById, createApp, deleteApp, appendLog, store, setJson } = require('./_store');
 
 function adminOk(event) {
   const h = event.headers['x-kernel-admin-key'] || event.headers['X-Kernel-Admin-Key'];
@@ -33,6 +33,30 @@ exports.handler = async (event) => {
         version: body.version,
       });
       return json(201, { ok: true, app });
+    }
+
+    if (event.httpMethod === 'PATCH') {
+      const body = await readJsonBody(event);
+      const id = body.id || event.queryStringParameters?.id;
+      if (!id) return json(400, { ok: false, error: 'Missing id' });
+      const s = await store('kernel-apps');
+      const app = await getAppById(id);
+      if (!app) return json(404, { ok: false, error: 'Application not found' });
+      const settings = body.settings || {};
+      const updated = {
+        ...app,
+        ...(body.app_name != null ? { app_name: String(body.app_name).trim() } : {}),
+        ...(body.version != null ? { version: String(body.version).trim() } : {}),
+        settings: {
+          ...(app.settings || {}),
+          ...settings,
+          updated_at: new Date().toISOString(),
+        },
+        updated_at: new Date().toISOString(),
+      };
+      await setJson(s, id, updated);
+      await appendLog({ type: 'app_updated', app_id: id });
+      return json(200, { ok: true, app: updated });
     }
 
     if (event.httpMethod === 'DELETE') {

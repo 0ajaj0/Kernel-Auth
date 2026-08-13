@@ -8,13 +8,19 @@ exports.handler = async (event) => {
 
   try {
     initBlobs(event);
+    const { listApps } = require('./_store');
     const licenses = await store('kernel-licenses');
     const users = await store('kernel-users');
     const logs = await store('kernel-logs');
+    const devices = await store('kernel-devices');
+    const team = await store('kernel-team');
 
     const licenseList = await licenses.list();
     const userList = await users.list();
     const logList = await logs.list();
+    const deviceList = await devices.list();
+    const teamList = await team.list();
+    const apps = await listApps();
 
     let activeLicenses = 0;
     for (const b of licenseList.blobs) {
@@ -22,12 +28,19 @@ exports.handler = async (event) => {
       if (r && !r.revoked) activeLicenses++;
     }
 
+    const staff = teamList.blobs.filter((b) => b.key.startsWith('staff:')).length;
+    const resellers = teamList.blobs.filter((b) => b.key.startsWith('resellers:')).length;
+
     return json(200, {
       ok: true,
       stats: {
+        apps: apps.length,
         users: userList.blobs.length,
         licenses: licenseList.blobs.length,
         active_licenses: activeLicenses,
+        devices: deviceList.blobs.length,
+        staff,
+        resellers,
         logs: logList.blobs.length,
       },
     });
