@@ -1,4 +1,4 @@
-const { json, readJsonBody } = require('./_shared');
+const { json, readJsonBody, initBlobs } = require('./_shared');
 const { store, getJson, setJson, appendLog, findLicense, userBlobKey } = require('./_store');
 
 exports.handler = async (event) => {
@@ -8,6 +8,7 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
 
   try {
+    initBlobs(event);
     const body = await readJsonBody(event);
     const sessionId = body.session_id;
     if (!sessionId) return json(400, { success: false, message: 'Missing session_id' });

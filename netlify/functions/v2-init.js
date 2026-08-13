@@ -1,4 +1,4 @@
-const { json, readJsonBody } = require('./_shared');
+const { json, readJsonBody, initBlobs } = require('./_shared');
 const { findApp, store, setJson, appendLog } = require('./_store');
 
 exports.handler = async (event) => {
@@ -8,6 +8,7 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
 
   try {
+    initBlobs(event);
     const body = await readJsonBody(event);
     const app = await findApp(body.owner_id, body.app_name);
     if (!app) {

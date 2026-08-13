@@ -1,9 +1,7 @@
 const { getStore } = require('@netlify/blobs');
 
 async function store(name) {
-  const opts = { name, consistency: 'strong' };
-  if (process.env.NETLIFY_SITE_ID) opts.siteID = process.env.NETLIFY_SITE_ID;
-  return getStore(opts);
+  return getStore({ name, consistency: 'strong' });
 }
 
 function fallbackApp() {
@@ -47,23 +45,18 @@ async function addToAppIndex(id) {
 }
 
 async function ensureDefaultApp() {
-  try {
-    const s = await store('kernel-apps');
-    let app = await getJson(s, 'default');
-    if (!app) {
-      app = { ...fallbackApp(), id: 'default' };
-      await setJson(s, 'default', app);
-      await addToAppIndex('default');
-    } else if (!app.id) {
-      app.id = 'default';
-      await setJson(s, 'default', app);
-      await addToAppIndex('default');
-    }
-    return app;
-  } catch (err) {
-    console.error('ensureDefaultApp fallback:', err.message);
-    return { ...fallbackApp(), id: 'default' };
+  const s = await store('kernel-apps');
+  let app = await getJson(s, 'default');
+  if (!app) {
+    app = { ...fallbackApp(), id: 'default' };
+    await setJson(s, 'default', app);
+    await addToAppIndex('default');
+  } else if (!app.id) {
+    app.id = 'default';
+    await setJson(s, 'default', app);
+    await addToAppIndex('default');
   }
+  return app;
 }
 
 async function getApp() {
@@ -71,31 +64,21 @@ async function getApp() {
 }
 
 async function listApps() {
-  try {
-    await ensureDefaultApp();
-    const s = await store('kernel-apps');
-    const index = await getJson(s, '__index__', { ids: ['default'] });
-    const apps = [];
-    for (const id of index.ids) {
-      const app = await getJson(s, id);
-      if (app) apps.push(app);
-    }
-    return apps.length ? apps : [{ ...fallbackApp(), id: 'default' }];
-  } catch (err) {
-    console.error('listApps fallback:', err.message);
-    return [{ ...fallbackApp(), id: 'default' }];
+  await ensureDefaultApp();
+  const s = await store('kernel-apps');
+  const index = await getJson(s, '__index__', { ids: ['default'] });
+  const apps = [];
+  for (const id of index.ids) {
+    const app = await getJson(s, id);
+    if (app) apps.push(app);
   }
+  return apps.length ? apps : [{ ...fallbackApp(), id: 'default' }];
 }
 
 async function getAppById(id) {
   if (!id || id === 'default') return ensureDefaultApp();
-  try {
-    const s = await store('kernel-apps');
-    return getJson(s, id);
-  } catch (err) {
-    console.error('getAppById fallback:', err.message);
-    return null;
-  }
+  const s = await store('kernel-apps');
+  return getJson(s, id);
 }
 
 async function findApp(ownerId, appName) {

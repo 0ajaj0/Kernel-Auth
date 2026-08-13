@@ -4,6 +4,12 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
 };
 
+const { connectLambda } = require('@netlify/blobs');
+
+function initBlobs(event) {
+  if (event) connectLambda(event);
+}
+
 function json(statusCode, body) {
   return {
     statusCode,
@@ -111,4 +117,5 @@ module.exports = {
   netlifyCallback,
   readJsonBody,
   parseProfile,
+  initBlobs,
 };

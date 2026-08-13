@@ -1,4 +1,4 @@
-const { json, readJsonBody } = require('./_shared');
+const { json, readJsonBody, initBlobs } = require('./_shared');
 const { findLicense, store, setJson } = require('./_store');
 
 function normalizeKey(key) {
@@ -14,6 +14,7 @@ exports.handler = async (event) => {
   }
 
   try {
+    initBlobs(event);
     const body = await readJsonBody(event);
     const licenseKey = normalizeKey(body.license_key);
     const email = (body.email || '').trim().toLowerCase();

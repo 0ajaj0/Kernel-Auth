@@ -1,4 +1,4 @@
-const { json, readJsonBody } = require('./_shared');
+const { json, readJsonBody, initBlobs } = require('./_shared');
 const { listApps, getAppById, createApp, deleteApp, appendLog } = require('./_store');
 
 function adminOk(event) {
@@ -12,6 +12,7 @@ exports.handler = async (event) => {
   }
 
   try {
+    initBlobs(event);
     if (event.httpMethod === 'GET') {
       const id = event.queryStringParameters?.id;
       if (id) {

@@ -1,4 +1,4 @@
-const { json, env, readJsonBody } = require('./_shared');
+const { json, env, readJsonBody, initBlobs } = require('./_shared');
 const { store, getJson, setJson, appendLog, licenseBlobKey, findLicense } = require('./_store');
 
 function isAdmin(event) {
@@ -31,6 +31,7 @@ exports.handler = async (event) => {
   }
 
   try {
+    initBlobs(event);
     const body = event.httpMethod === 'GET' ? {} : await readJsonBody(event);
     const appId = appIdFrom(event, body);
     const s = await store('kernel-licenses');

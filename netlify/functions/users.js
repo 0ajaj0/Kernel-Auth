@@ -1,4 +1,4 @@
-const { json, readJsonBody } = require('./_shared');
+const { json, readJsonBody, initBlobs } = require('./_shared');
 const { store, getJson, setJson, appendLog, userBlobKey } = require('./_store');
 
 function adminOk(event) {
@@ -21,6 +21,7 @@ exports.handler = async (event) => {
   }
 
   try {
+    initBlobs(event);
     const body = event.httpMethod === 'GET' ? {} : await readJsonBody(event);
     const appId = appIdFrom(event, body);
     const s = await store('kernel-users');

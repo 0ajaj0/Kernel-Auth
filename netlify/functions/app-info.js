@@ -1,8 +1,9 @@
-const { json } = require('./_shared');
+const { json, initBlobs } = require('./_shared');
 const { getApp } = require('./_store');
 
-exports.handler = async () => {
+exports.handler = async (event) => {
   try {
+    initBlobs(event);
     const app = await getApp();
     return json(200, { ok: true, app });
   } catch (err) {
