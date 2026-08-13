@@ -1,11 +1,6 @@
-const { json, env, readJsonBody, initBlobs } = require('./_shared');
+const { json, env, readJsonBody, initBlobs, sendDiscordWebhook } = require('./_shared');
 const { store, getJson, setJson, appendLog, licenseBlobKey, findLicense } = require('./_store');
-
-function isAdmin(event) {
-  const header = event.headers['x-kernel-admin-key'] || event.headers['X-Kernel-Admin-Key'];
-  const adminPass = env('KERNEL_ADMIN_PASSWORD');
-  return adminPass && header === adminPass;
-}
+const { adminOk } = require('./_auth');
 
 function normalizeKey(key) {
   return String(key || '').trim().toUpperCase();
@@ -26,7 +21,7 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': '*' } };
   }
-  if (!isAdmin(event)) {
+  if (!(await adminOk(event))) {
     return json(401, { error: 'Unauthorized admin request' });
   }
 
@@ -83,6 +78,12 @@ exports.handler = async (event) => {
 
       await setJson(s, blobKey, record);
       await appendLog({ type: 'license_created', app_id: appId, key: licenseKey });
+      await sendDiscordWebhook('License Key Generated', [
+        { name: 'App', value: appId },
+        { name: 'Key', value: licenseKey },
+        { name: 'Level', value: record.level },
+        { name: 'Subscription', value: record.subscription },
+      ]);
       return json(201, { ok: true, app_id: appId, license_key: licenseKey, record });
     }
 

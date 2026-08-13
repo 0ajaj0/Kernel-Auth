@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const STORAGE_KEY = 'kernel_admin_token';
+  const STORAGE_KEY = 'kernel_auth_token';
   const PROFILE_KEY = 'kernel_user_profile';
 
   const NAV_APP = [
@@ -51,7 +51,7 @@
     resellers: { title: 'Resellers', desc: 'Reseller accounts and commission tracking.' },
   };
 
-  let token = sessionStorage.getItem(STORAGE_KEY) || '';
+  let token = sessionStorage.getItem(STORAGE_KEY) || sessionStorage.getItem('kernel_admin_token') || '';
   let userProfile = null;
   try { userProfile = JSON.parse(sessionStorage.getItem(PROFILE_KEY) || 'null'); } catch { userProfile = null; }
   let mode = sessionStorage.getItem('kernel_nav_mode') || 'app';
@@ -96,7 +96,12 @@
   const $$ = (sel, root) => [...(root || document).querySelectorAll(sel)];
 
   function headers() {
-    return { 'Content-Type': 'application/json', 'X-Kernel-Admin-Key': token };
+    const h = { 'Content-Type': 'application/json' };
+    if (token) {
+      h.Authorization = 'Bearer ' + token;
+      h['X-Kernel-Admin-Key'] = token;
+    }
+    return h;
   }
 
   async function api(path, opts = {}) {
@@ -1195,6 +1200,8 @@
     token = '';
     userProfile = null;
     sessionStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem('kernel_admin_token');
+    sessionStorage.removeItem('kernel_auth_role');
     sessionStorage.removeItem(PROFILE_KEY);
     $('#appView').classList.add('hidden');
     $('#loginView').classList.remove('hidden');
@@ -1208,18 +1215,27 @@
     if (!ok) { err.textContent = data.error || 'Invalid password'; err.classList.remove('hidden'); return; }
     token = data.token;
     sessionStorage.setItem(STORAGE_KEY, token);
+    sessionStorage.setItem('kernel_admin_token', token);
+    sessionStorage.setItem('kernel_auth_role', data.role || 'ADMIN');
     await showApp();
   }
 
-  function startGoogleLogin() {
-    if (!config?.oauth?.google?.enabled) {
-      toast('Google OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Netlify.', 'error');
+  function startOAuth(provider) {
+    const key = provider || 'google';
+    if (!config?.oauth?.[key]?.enabled) {
+      toast(key.charAt(0).toUpperCase() + key.slice(1) + ' OAuth is not configured. Add credentials in Netlify.', 'error');
       return;
     }
-    const state = 'dashboard-' + crypto.randomUUID();
+    if (window.KernelAuth) {
+      KernelAuth.startOAuth(key, 'ADMIN');
+      return;
+    }
+    const state = 'kernel:admin:' + key + ':' + crypto.randomUUID();
     sessionStorage.setItem('kernel_oauth_state', state);
-    window.location.href = '/api/oauth-start?provider=google&state=' + encodeURIComponent(state);
+    window.location.href = '/api/oauth-start?provider=' + encodeURIComponent(key) + '&role=admin&state=' + encodeURIComponent(state);
   }
+
+  function startGoogleLogin() { startOAuth('google'); }
 
   function showOAuthLoginError() {
     const params = new URLSearchParams(location.search);
@@ -1239,6 +1255,8 @@
   $('#loginBtn').addEventListener('click', login);
   $('#loginPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
   $('#googleLoginBtn').addEventListener('click', startGoogleLogin);
+  $('#discordLoginBtn')?.addEventListener('click', () => startOAuth('discord'));
+  $('#githubLoginBtn')?.addEventListener('click', () => startOAuth('github'));
   $('#logoutBtn').addEventListener('click', logout);
   $('#linkInvites')?.addEventListener('click', (e) => { e.preventDefault(); toast('Invites coming soon — use Staff/Resellers for now'); });
   $('#linkSupport')?.addEventListener('click', (e) => { e.preventDefault(); window.open('https://discord.com', '_blank'); });

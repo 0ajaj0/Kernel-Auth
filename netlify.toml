@@ -32,6 +32,16 @@
   to = "/oauth/callback.html"
   status = 200
 
+[[redirects]]
+  from = "/dashboard/*"
+  to = "/admin/dashboard/:splat"
+  status = 302
+
+[[redirects]]
+  from = "/dashboard"
+  to = "/admin/dashboard/"
+  status = 302
+
 [[headers]]
   for = "/*"
   [headers.values]

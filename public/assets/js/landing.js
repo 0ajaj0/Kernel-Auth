@@ -8,6 +8,7 @@
   };
 
   let yearly = false;
+  let config = null;
 
   function toast(msg) {
     let el = document.getElementById('landingToast');
@@ -32,7 +33,15 @@
   function updatePricing() {
     document.querySelectorAll('[data-plan-price]').forEach((el) => {
       const plan = el.dataset.planPrice;
-      el.textContent = priceFor(plan);
+      const oldVal = el.textContent;
+      const newVal = priceFor(plan);
+      el.textContent = newVal;
+      if (oldVal !== newVal) {
+        el.style.transition = 'transform .3s, color .3s';
+        el.style.transform = 'scale(1.08)';
+        el.style.color = '#3b82f6';
+        setTimeout(() => { el.style.transform = ''; el.style.color = ''; }, 300);
+      }
     });
     document.querySelectorAll('[data-plan-suffix]').forEach((el) => {
       const plan = el.dataset.planSuffix;
@@ -40,12 +49,38 @@
     });
   }
 
+  function openAuthModal() {
+    const modal = document.getElementById('authModal');
+    if (modal) modal.classList.remove('hidden');
+  }
+
+  function closeAuthModal() {
+    const modal = document.getElementById('authModal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function startOAuth(provider) {
+    if (!config?.oauth?.[provider]?.enabled) {
+      toast(provider.charAt(0).toUpperCase() + provider.slice(1) + ' OAuth is not configured.');
+      return;
+    }
+    if (window.KernelAuth) {
+      KernelAuth.startOAuth(provider, 'CUSTOMER');
+    } else {
+      const state = 'kernel:customer:' + provider + ':' + crypto.randomUUID();
+      sessionStorage.setItem('kernel_oauth_state', state);
+      location.href = '/api/oauth-start?provider=' + encodeURIComponent(provider) + '&role=customer&state=' + encodeURIComponent(state);
+    }
+  }
+
   function choosePlan(planId) {
     sessionStorage.setItem('kernel_selected_plan', planId);
     toast('Plan selected: ' + (PLANS[planId]?.name || planId));
-    setTimeout(() => {
-      window.location.href = '/dashboard/?plan=' + encodeURIComponent(planId);
-    }, 400);
+    if (planId === 'enterprise') {
+      document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    openAuthModal();
   }
 
   function initNavScroll() {
@@ -83,6 +118,18 @@
     });
   }
 
+  function initAuthModal() {
+    document.querySelectorAll('[data-auth-open]').forEach((el) => {
+      el.addEventListener('click', (e) => { e.preventDefault(); openAuthModal(); });
+    });
+    document.querySelectorAll('[data-auth-close]').forEach((el) => {
+      el.addEventListener('click', closeAuthModal);
+    });
+    document.querySelectorAll('[data-oauth]').forEach((btn) => {
+      btn.addEventListener('click', () => startOAuth(btn.dataset.oauth));
+    });
+  }
+
   document.querySelectorAll('[data-choose-plan]').forEach((btn) => {
     btn.addEventListener('click', () => choosePlan(btn.dataset.choosePlan));
   });
@@ -96,7 +143,10 @@
     });
   }
 
+  fetch('/api/config').then((r) => r.json()).then((d) => { config = d; }).catch(() => {});
+
   initNavScroll();
   initPricingToggle();
+  initAuthModal();
   updatePricing();
 })();

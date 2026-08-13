@@ -1,10 +1,6 @@
 const { json, readJsonBody, initBlobs } = require('./_shared');
 const { store, getJson, setJson, appendLog } = require('./_store');
-
-function adminOk(event) {
-  const h = event.headers['x-kernel-admin-key'] || event.headers['X-Kernel-Admin-Key'];
-  return h && h === process.env.KERNEL_ADMIN_PASSWORD;
-}
+const { adminOk } = require('./_auth');
 
 function blobKey(type, id) {
   return `${type}:${id}`;
@@ -38,7 +34,7 @@ exports.handler = async (event) => {
       return json(200, { ok: true, type, items });
     }
 
-    if (!adminOk(event)) return json(401, { error: 'Unauthorized' });
+    if (!(await adminOk(event))) return json(401, { error: 'Unauthorized' });
 
     if (event.httpMethod === 'POST') {
       const id = body.id || crypto.randomUUID();

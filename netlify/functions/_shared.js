@@ -1,7 +1,7 @@
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Kernel-Admin-Key',
-  'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Kernel-Admin-Key, X-Kernel-Token',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
 };
 
 const { connectLambda } = require('@netlify/blobs');
@@ -107,6 +107,27 @@ function parseProfile(provider, raw, emailFallback = '') {
   return null;
 }
 
+async function sendDiscordWebhook(title, fields = []) {
+  const url = env('DISCORD_WEBHOOK_URL');
+  if (!url) return;
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        embeds: [{
+          title,
+          color: 0x3b82f6,
+          fields: fields.map((f) => ({ name: f.name, value: String(f.value), inline: f.inline !== false })),
+          timestamp: new Date().toISOString(),
+        }],
+      }),
+    });
+  } catch (err) {
+    console.error('Discord webhook failed:', err.message);
+  }
+}
+
 module.exports = {
   corsHeaders,
   json,
@@ -118,4 +139,5 @@ module.exports = {
   readJsonBody,
   parseProfile,
   initBlobs,
+  sendDiscordWebhook,
 };

@@ -1,4 +1,5 @@
 const { json, providerConfig, netlifyCallback } = require('./_shared');
+const { ROLES, buildOAuthState } = require('./_auth');
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -6,15 +7,22 @@ exports.handler = async (event) => {
   }
 
   const provider = (event.queryStringParameters?.provider || 'google').toLowerCase();
-  const state = event.queryStringParameters?.state || crypto.randomUUID();
+  let state = event.queryStringParameters?.state || '';
+  const roleParam = (event.queryStringParameters?.role || 'customer').toLowerCase();
+  const role = roleParam === 'admin' ? ROLES.ADMIN : ROLES.CUSTOMER;
+
+  if (!state || state.startsWith('dashboard-')) {
+    state = buildOAuthState(role, provider);
+  }
+
   const cfg = providerConfig(provider);
 
   if (!cfg || !cfg.clientId) {
-    const state = event.queryStringParameters?.state || '';
-    if (state.startsWith('dashboard-')) {
+    const isWeb = state.startsWith('kernel:') || (state && state.startsWith('dashboard-'));
+    if (isWeb) {
       return {
         statusCode: 302,
-        headers: { Location: '/dashboard/?oauth_error=google_not_configured' },
+        headers: { Location: `/login/?oauth_error=${provider}_not_configured` },
         body: '',
       };
     }

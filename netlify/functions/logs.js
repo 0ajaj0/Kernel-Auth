@@ -1,10 +1,6 @@
 const { json, initBlobs } = require('./_shared');
 const { store, getJson } = require('./_store');
-
-function adminOk(event) {
-  const h = event.headers['x-kernel-admin-key'] || event.headers['X-Kernel-Admin-Key'];
-  return h && h === process.env.KERNEL_ADMIN_PASSWORD;
-}
+const { adminOk } = require('./_auth');
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -29,7 +25,7 @@ exports.handler = async (event) => {
     }
 
     if (event.httpMethod === 'DELETE') {
-      if (!adminOk(event)) return json(401, { error: 'Unauthorized' });
+      if (!(await adminOk(event))) return json(401, { error: 'Unauthorized' });
       const all = event.queryStringParameters?.all === '1';
       if (all) {
         const list = await s.list();

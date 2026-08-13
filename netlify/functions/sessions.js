@@ -1,16 +1,12 @@
 const { json, initBlobs } = require('./_shared');
 const { store, getJson } = require('./_store');
-
-function adminOk(event) {
-  const h = event.headers['x-kernel-admin-key'] || event.headers['X-Kernel-Admin-Key'];
-  return h && h === process.env.KERNEL_ADMIN_PASSWORD;
-}
+const { adminOk } = require('./_auth');
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': '*' } };
   }
-  if (!adminOk(event)) return json(401, { error: 'Unauthorized' });
+  if (!(await adminOk(event))) return json(401, { error: 'Unauthorized' });
 
   try {
     initBlobs(event);

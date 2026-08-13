@@ -1,10 +1,6 @@
-const { json, readJsonBody, initBlobs } = require('./_shared');
+const { json, readJsonBody, initBlobs, sendDiscordWebhook } = require('./_shared');
 const { store, getJson, setJson, appendLog } = require('./_store');
-
-function adminOk(event) {
-  const h = event.headers['x-kernel-admin-key'] || event.headers['X-Kernel-Admin-Key'];
-  return h && h === process.env.KERNEL_ADMIN_PASSWORD;
-}
+const { adminOk } = require('./_auth');
 
 function appIdFrom(event, body = {}) {
   return event.queryStringParameters?.app_id || body.app_id || 'default';
@@ -38,7 +34,7 @@ exports.handler = async (event) => {
       return json(200, { ok: true, app_id: appId, devices });
     }
 
-    if (!adminOk(event)) return json(401, { error: 'Unauthorized' });
+    if (!(await adminOk(event))) return json(401, { error: 'Unauthorized' });
 
     if (event.httpMethod === 'POST') {
       const hwid = String(body.hwid || body.system_id || '').trim();
@@ -71,6 +67,14 @@ exports.handler = async (event) => {
         updated_at: new Date().toISOString(),
       };
       await setJson(s, key, updated);
+      if (body.status === 'unbound' || body.status === 'reset') {
+        await sendDiscordWebhook('HWID Reset', [
+          { name: 'App', value: appId },
+          { name: 'Device ID', value: id },
+          { name: 'HWID', value: existing.hwid || '—' },
+          { name: 'Status', value: updated.status },
+        ]);
+      }
       return json(200, { ok: true, device: { id, ...updated } });
     }
 

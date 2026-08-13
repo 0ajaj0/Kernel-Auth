@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Unauthorized — KERNEL Auth</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { --bg: #0D0F12; --panel: #15181E; --border: #1e293b; --text: #f1f5f9; --muted: #94a3b8; }
+    body {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 24px;
+    }
+    .card {
+      max-width: 440px; text-align: center; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 16px; padding: 40px 32px;
+    }
+    .icon { font-size: 56px; margin-bottom: 16px; }
+    h1 { font-size: 24px; margin-bottom: 10px; color: #ef4444; }
+    p { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 24px; }
+    .btn {
+      display: inline-block; padding: 12px 24px; border-radius: 10px; text-decoration: none;
+      font-weight: 600; font-size: 14px; margin: 4px;
+    }
+    .btn-primary { background: #3b82f6; color: #fff; }
+    .btn-ghost { border: 1px solid var(--border); color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">🛡</div>
+    <h1>403 — Unauthorized</h1>
+    <p>You don't have permission to access the admin dashboard. Customer accounts can only view the client portal.</p>
+    <a class="btn btn-primary" href="/client/dashboard/">Go to Client Dashboard</a>
+    <a class="btn btn-ghost" href="/">Back to Home</a>
+  </div>
+</body>
+</html>

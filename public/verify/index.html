@@ -17,69 +17,68 @@
       width: 420px; background: var(--panel); border: 1px solid var(--border);
       border-radius: 16px; padding: 36px; text-align: center;
     }
-    .logo {
-      width: 44px; height: 44px; margin: 0 auto 16px; background: linear-gradient(135deg, var(--blue), var(--cyan));
-      border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 800;
+    .shield {
+      width: 56px; height: 56px; margin: 0 auto 20px; position: relative;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .shield svg { width: 56px; height: 56px; color: var(--blue); }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.08); opacity: 0.85; }
     }
     h1 { font-size: 20px; margin-bottom: 8px; }
     p { color: var(--muted); font-size: 14px; margin-bottom: 24px; line-height: 1.5; }
-    .spinner-wrap { position: relative; height: 56px; margin-bottom: 20px; }
-    .spinner {
-      width: 44px; height: 44px; border: 3px solid rgba(59,130,246,0.2);
-      border-top-color: var(--blue); border-radius: 50%; margin: 0 auto;
-      animation: spin 0.9s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
     .progress { height: 4px; background: rgba(255,255,255,0.06); border-radius: 999px; overflow: hidden; margin-bottom: 16px; }
     .progress-bar {
       height: 100%; width: 0%; background: linear-gradient(90deg, var(--blue), var(--cyan));
-      border-radius: 999px; transition: width 0.3s;
+      border-radius: 999px; transition: width 0.4s ease;
     }
     .status { font-size: 13px; color: var(--cyan); font-weight: 500; }
     .hidden { display: none; }
-    .success-icon { font-size: 48px; margin-bottom: 12px; }
   </style>
 </head>
 <body>
   <div class="card" id="card">
-    <div class="logo">K</div>
-    <h1 id="title">Quick Security Check</h1>
-    <p id="subtitle">Complete this check to continue to your dashboard.</p>
-    <div id="loadingView">
-      <div class="spinner-wrap"><div class="spinner"></div></div>
-      <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
-      <div class="status" id="status">Verifying identity…</div>
+    <div class="shield">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 2L4 5v6c0 5.25 3.5 10 8 11 4.5-1 8-5.75 8-11V5l-8-3z"/>
+      </svg>
     </div>
-    <div id="successView" class="hidden">
-      <div class="success-icon">✓</div>
-      <div class="status" style="color:#22c55e">Verification complete</div>
-    </div>
+    <h1 id="title">Completing Security Checks...</h1>
+    <p id="subtitle">Verifying Session</p>
+    <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+    <div class="status" id="status">Initializing JWT cookie context…</div>
   </div>
   <script>
     (function () {
-      const steps = [
-        'Verifying identity…',
-        'Checking session integrity…',
-        'Validating OAuth token…',
-        'Preparing your dashboard…',
-      ];
+      const params = new URLSearchParams(location.search);
+      const redirect = params.get('redirect') || sessionStorage.getItem('kernel_auth_role') === 'ADMIN'
+        ? '/admin/dashboard/' : '/client/dashboard/';
+
       const bar = document.getElementById('progressBar');
       const status = document.getElementById('status');
+      const steps = [
+        'Initializing JWT cookie context…',
+        'Verifying OAuth session…',
+        'Checking role permissions…',
+        'Preparing dashboard…',
+      ];
       let i = 0;
       const tick = setInterval(() => {
-        if (i >= steps.length) {
-          clearInterval(tick);
-          document.getElementById('loadingView').classList.add('hidden');
-          document.getElementById('successView').classList.remove('hidden');
-          document.getElementById('title').textContent = 'Welcome back!';
-          document.getElementById('subtitle').textContent = 'Redirecting to dashboard…';
-          setTimeout(() => { window.location.href = '/dashboard/'; }, 800);
-          return;
-        }
-        status.textContent = steps[i];
-        bar.style.width = ((i + 1) / steps.length * 100) + '%';
+        bar.style.width = Math.min(100, ((i + 1) / steps.length) * 100) + '%';
+        if (i < steps.length) status.textContent = steps[i];
         i++;
-      }, 700);
+        if (i > steps.length) {
+          clearInterval(tick);
+          setTimeout(() => { window.location.href = redirect; }, 300);
+        }
+      }, 375);
+
+      setTimeout(() => {
+        const role = sessionStorage.getItem('kernel_auth_role');
+        const target = params.get('redirect') || (role === 'ADMIN' ? '/admin/dashboard/' : '/client/dashboard/');
+        window.location.href = target;
+      }, 1500);
     })();
   </script>
 </body>
