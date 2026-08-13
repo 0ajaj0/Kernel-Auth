@@ -18,6 +18,8 @@
   let currentPage = 'dashboard';
   let config = null;
   let appInfo = null;
+  let apps = [];
+  let selectedAppId = sessionStorage.getItem('kernel_selected_app') || 'default';
 
   const $ = (sel) => document.querySelector(sel);
   const loginView = $('#loginView');
@@ -95,9 +97,62 @@
     navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard'));
   }
 
-  function showApp() {
+  function selectedApp() {
+    return apps.find((a) => a.id === selectedAppId) || apps[0] || null;
+  }
+
+  function setSelectedApp(id) {
+    selectedAppId = id;
+    sessionStorage.setItem('kernel_selected_app', id);
+    renderNav();
+    navigate(currentPage);
+  }
+
+  async function loadApps() {
+    const { ok, data } = await api('applications');
+    if (!ok) throw new Error(data.error || 'Failed to load applications');
+    apps = data.apps || [];
+    if (!apps.length) apps = [data.app].filter(Boolean);
+    if (!apps.find((a) => a.id === selectedAppId)) {
+      selectedAppId = apps[0]?.id || 'default';
+      sessionStorage.setItem('kernel_selected_app', selectedAppId);
+    }
+    return apps;
+  }
+
+  function renderAppSelector() {
+    if (!apps.length) return '';
+    return `
+      <label style="font-size:12px;color:var(--muted);margin-right:8px">Active App</label>
+      <select id="appSelector" style="padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">
+        ${apps.map((a) => `<option value="${esc(a.id)}"${a.id === selectedAppId ? ' selected' : ''}>${esc(a.app_name)}</option>`).join('')}
+      </select>`;
+  }
+
+  function bindAppSelector() {
+    const sel = $('#appSelector');
+    if (sel) sel.onchange = () => setSelectedApp(sel.value);
+  }
+
+  function showLoadError(message) {
+    pageContent.innerHTML = `
+      <div class="panel">
+        <div class="panel-body" style="padding:24px">
+          <p style="color:var(--danger);margin-bottom:12px">${esc(message)}</p>
+          <button class="btn btn-primary btn-sm" id="retryPage">Retry</button>
+        </div>
+      </div>`;
+    $('#retryPage').onclick = () => navigate(currentPage);
+  }
+
+  async function showApp() {
     loginView.classList.add('hidden');
     appView.classList.remove('hidden');
+    try {
+      await loadApps();
+    } catch (err) {
+      apps = [];
+    }
     renderNav();
     navigate(currentPage);
   }
@@ -124,7 +179,7 @@
     }
     token = data.token;
     sessionStorage.setItem(STORAGE_KEY, token);
-    showApp();
+    await showApp();
   }
 
   function renderNav() {
@@ -197,53 +252,125 @@
 
   /* ── Applications ── */
   async function renderApplications() {
-    topbarActions.innerHTML = '';
+    topbarActions.innerHTML = `<button class="btn btn-primary btn-sm" id="createAppBtn">+ Create Application</button>`;
     pageContent.innerHTML = '<p style="color:var(--muted)">Loading…</p>';
-    const { data } = await api('app-info');
-    appInfo = data.app;
-    const site = config?.site_url || window.location.origin;
-    pageContent.innerHTML = `
-      <div class="panel">
-        <div class="panel-head"><h3>Application Details</h3></div>
-        <div class="panel-body" style="padding:20px">
-          <div class="grid-2">
-            <div class="field"><label>App Name</label><input readonly value="${esc(appInfo.app_name)}" /></div>
-            <div class="field"><label>Version</label><input readonly value="${esc(appInfo.version)}" /></div>
+    try {
+      await loadApps();
+      const site = config?.site_url || window.location.origin;
+      pageContent.innerHTML = `
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Applications (${apps.length})</h3>
+            <span style="font-size:12px;color:var(--muted)">Unlimited apps — each project gets unique Owner ID + Secret</span>
           </div>
-          <div class="field">
-            <label>Owner ID</label>
-            <div class="cred-box">${esc(appInfo.owner_id)}<button class="btn btn-ghost btn-sm copy-btn" data-copy="${esc(appInfo.owner_id)}">Copy</button></div>
+          <div class="panel-body">
+            <table>
+              <thead><tr><th>App Name</th><th>Owner ID</th><th>Version</th><th>Created</th><th></th></tr></thead>
+              <tbody>
+                ${apps.map((a) => `
+                  <tr>
+                    <td><strong>${esc(a.app_name)}</strong>${a.id === selectedAppId ? ' <span class="badge badge-accent">Active</span>' : ''}</td>
+                    <td><code style="font-size:11px">${esc(a.owner_id.slice(0, 8))}…</code></td>
+                    <td>${esc(a.version || '1.0')}</td>
+                    <td>${fmtDate(a.created_at)}</td>
+                    <td>
+                      <button class="btn btn-ghost btn-sm" data-use-app="${esc(a.id)}">Use</button>
+                      <button class="btn btn-ghost btn-sm" data-view-app="${esc(a.id)}">Credentials</button>
+                      ${a.id !== 'default' ? `<button class="btn btn-danger btn-sm" data-del-app="${esc(a.id)}">Delete</button>` : ''}
+                    </td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
           </div>
-          <div class="field">
-            <label>App Secret</label>
-            <div class="cred-box">${esc(appInfo.secret)}<button class="btn btn-ghost btn-sm copy-btn" data-copy="${esc(appInfo.secret)}">Copy</button></div>
-          </div>
-          <p style="font-size:12px;color:var(--muted);margin-top:8px">Use these credentials in your loader SDK init call (v2-init / AuthlyX-compatible).</p>
         </div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h3>API Endpoints</h3></div>
-        <div class="panel-body" style="padding:20px">
-          <div class="field"><label>Init</label><div class="cred-box">${site}/api/v2-init</div></div>
-          <div class="field"><label>Login</label><div class="cred-box">${site}/api/v2-login</div></div>
-          <div class="field"><label>License Activate</label><div class="cred-box">${site}/api/license-activate</div></div>
-          <div class="field"><label>License Verify</label><div class="cred-box">${site}/api/license-verify</div></div>
-        </div>
-      </div>`;
-    pageContent.querySelectorAll('[data-copy]').forEach((b) => {
-      b.onclick = () => copyText(b.dataset.copy);
+        <div class="panel" id="appDetailPanel">
+          <div class="panel-head"><h3>Integration Guide</h3></div>
+          <div class="panel-body" style="padding:20px;font-size:13px;color:var(--muted)">
+            Select an app and click <strong>Credentials</strong> to copy Owner ID + Secret for your loader/project SDK.
+            Users and license keys you create will belong to the currently active app.
+          </div>
+        </div>`;
+
+      $('#createAppBtn').onclick = () => {
+        showModal(`
+          <div class="modal">
+            <h2>Create Application</h2>
+            <div class="field"><label>App Name</label><input id="mAppName" placeholder="My Cheat / My Loader" /></div>
+            <div class="field"><label>Version</label><input id="mAppVersion" value="1.0" /></div>
+            <div class="modal-actions">
+              <button class="btn btn-ghost" data-close>Cancel</button>
+              <button class="btn btn-primary" id="mCreateApp">Create</button>
+            </div>
+          </div>`);
+        $('#mCreateApp').onclick = async () => {
+          const { ok, data: d } = await api('applications', {
+            method: 'POST',
+            body: JSON.stringify({
+              app_name: $('#mAppName').value,
+              version: $('#mAppVersion').value,
+            }),
+          });
+          if (!ok) return toast(d.error || 'Failed to create app', 'error');
+          toast('Application created');
+          modalRoot.innerHTML = '';
+          setSelectedApp(d.app.id);
+        };
+      };
+
+      pageContent.querySelectorAll('[data-use-app]').forEach((b) => {
+        b.onclick = () => { setSelectedApp(b.dataset.useApp); toast('Active app updated'); };
+      });
+
+      pageContent.querySelectorAll('[data-view-app]').forEach((b) => {
+        b.onclick = () => showAppCredentials(b.dataset.viewApp, site);
+      });
+
+      pageContent.querySelectorAll('[data-del-app]').forEach((b) => {
+        b.onclick = async () => {
+          if (!confirm('Delete this application?')) return;
+          const { ok, data: d } = await api('applications?id=' + encodeURIComponent(b.dataset.delApp), { method: 'DELETE' });
+          if (!ok) return toast(d.error || 'Delete failed', 'error');
+          toast('Application deleted');
+          if (selectedAppId === b.dataset.delApp) selectedAppId = 'default';
+          renderApplications();
+        };
+      });
+    } catch (err) {
+      showLoadError(err.message || 'Failed to load applications');
+    }
+  }
+
+  function showAppCredentials(appId, site) {
+    const app = apps.find((a) => a.id === appId);
+    if (!app) return;
+    const snippet = `owner_id: ${app.owner_id}\napp_name: ${app.app_name}\nsecret: ${app.secret}\ninit_url: ${site}/api/v2-init\nlogin_url: ${site}/api/v2-login`;
+    showModal(`
+      <div class="modal" style="max-width:560px">
+        <h2>${esc(app.app_name)}</h2>
+        <div class="field"><label>Owner ID</label><div class="cred-box">${esc(app.owner_id)}<button class="btn btn-ghost btn-sm copy-btn" data-copy="${esc(app.owner_id)}">Copy</button></div></div>
+        <div class="field"><label>App Secret</label><div class="cred-box">${esc(app.secret)}<button class="btn btn-ghost btn-sm copy-btn" data-copy="${esc(app.secret)}">Copy</button></div></div>
+        <div class="field"><label>App ID</label><div class="cred-box">${esc(app.id)}</div></div>
+        <div class="field"><label>Loader / SDK Config</label><div class="cred-box" style="white-space:pre-wrap">${esc(snippet)}<button class="btn btn-ghost btn-sm copy-btn" data-copy="${esc(snippet)}">Copy All</button></div></div>
+        <div class="modal-actions"><button class="btn btn-primary" data-close>Done</button></div>
+      </div>`);
+    modalRoot.querySelectorAll('[data-copy]').forEach((btn) => {
+      btn.onclick = () => copyText(btn.dataset.copy);
     });
   }
 
   /* ── Users ── */
   async function renderUsers() {
-    topbarActions.innerHTML = `<button class="btn btn-primary btn-sm" id="addUserBtn">+ Add User</button>`;
+    topbarActions.innerHTML = `${renderAppSelector()}<button class="btn btn-primary btn-sm" id="addUserBtn">+ Add User</button>`;
     pageContent.innerHTML = '<p style="color:var(--muted)">Loading…</p>';
-    const { data } = await api('users');
-    const users = data.users || [];
-    pageContent.innerHTML = `
-      <div class="panel">
-        <div class="panel-head"><h3>Users (${users.length})</h3></div>
+    try {
+      await loadApps();
+      const app = selectedApp();
+      const { ok, data } = await api('users?app_id=' + encodeURIComponent(selectedAppId));
+      if (!ok) throw new Error(data.error || 'Failed to load users');
+      const users = data.users || [];
+      pageContent.innerHTML = `
+        <div class="panel">
+          <div class="panel-head"><h3>Users (${users.length}) — ${esc(app?.app_name || 'App')}</h3></div>
         <div class="panel-body">
           <table>
             <thead><tr><th>Username</th><th>Email</th><th>Provider</th><th>Subscription</th><th>Status</th><th>Created</th><th></th></tr></thead>
@@ -283,6 +410,7 @@
         const { ok, data: d } = await api('users', {
           method: 'POST',
           body: JSON.stringify({
+            app_id: selectedAppId,
             username: $('#mUsername').value,
             email: $('#mEmail').value,
             password: $('#mPassword').value,
@@ -300,7 +428,7 @@
       b.onclick = async () => {
         const { ok } = await api('users', {
           method: 'PATCH',
-          body: JSON.stringify({ id: b.dataset.ban, banned: b.dataset.state === '1' }),
+          body: JSON.stringify({ app_id: selectedAppId, id: b.dataset.ban, banned: b.dataset.state === '1' }),
         });
         if (ok) { toast('User updated'); renderUsers(); }
       };
@@ -308,21 +436,29 @@
     pageContent.querySelectorAll('[data-del-user]').forEach((b) => {
       b.onclick = async () => {
         if (!confirm('Delete this user?')) return;
-        const { ok } = await api('users?id=' + encodeURIComponent(b.dataset.delUser), { method: 'DELETE' });
+        const { ok } = await api('users?id=' + encodeURIComponent(b.dataset.delUser) + '&app_id=' + encodeURIComponent(selectedAppId), { method: 'DELETE' });
         if (ok) { toast('User deleted'); renderUsers(); }
       };
     });
+    bindAppSelector();
+    } catch (err) {
+      showLoadError(err.message || 'Failed to load users');
+    }
   }
 
   /* ── Licenses ── */
   async function renderLicenses() {
-    topbarActions.innerHTML = `<button class="btn btn-primary btn-sm" id="genKeyBtn">+ Generate Key</button>`;
+    topbarActions.innerHTML = `${renderAppSelector()}<button class="btn btn-primary btn-sm" id="genKeyBtn">+ Generate Key</button>`;
     pageContent.innerHTML = '<p style="color:var(--muted)">Loading…</p>';
-    const { data } = await api('admin-keys');
-    const keys = data.keys || [];
-    pageContent.innerHTML = `
-      <div class="panel">
-        <div class="panel-head"><h3>License Keys (${keys.length})</h3></div>
+    try {
+      await loadApps();
+      const app = selectedApp();
+      const { ok, data } = await api('admin-keys?app_id=' + encodeURIComponent(selectedAppId));
+      if (!ok) throw new Error(data.error || 'Failed to load licenses');
+      const keys = data.keys || [];
+      pageContent.innerHTML = `
+        <div class="panel">
+          <div class="panel-head"><h3>License Keys (${keys.length}) — ${esc(app?.app_name || 'App')}</h3></div>
         <div class="panel-body">
           <table>
             <thead><tr><th>Key</th><th>Subscription</th><th>Activations</th><th>Bound Email</th><th>Status</th><th>Created</th><th></th></tr></thead>
@@ -356,7 +492,7 @@
           <h2>Generate License Key</h2>
           <div class="field"><label>License Key</label><input id="mKey" value="${suggested}" /></div>
           <div class="field"><label>Subscription Name</label><input id="mSubName" value="KERNEL Premium" /></div>
-          <div class="field"><label>Max Activations</label><input id="mMaxAct" type="number" value="1" min="1" /></div>
+          <div class="field"><label>Max Activations</label><input id="mMaxAct" type="number" value="999999" min="1" /></div>
           <div class="field"><label>Expires At (optional)</label><input id="mExpires" type="datetime-local" /></div>
           <div class="modal-actions">
             <button class="btn btn-ghost" data-close>Cancel</button>
@@ -368,9 +504,10 @@
         const { ok, data: d } = await api('admin-keys', {
           method: 'POST',
           body: JSON.stringify({
+            app_id: selectedAppId,
             license_key: $('#mKey').value,
             subscription: $('#mSubName').value,
-            max_activations: Number($('#mMaxAct').value) || 1,
+            max_activations: Number($('#mMaxAct').value) || 999999,
             expires_at: expires ? new Date(expires).toISOString() : null,
           }),
         });
@@ -385,7 +522,7 @@
       b.onclick = async () => {
         const { ok } = await api('admin-keys', {
           method: 'PATCH',
-          body: JSON.stringify({ key: b.dataset.revoke, revoked: b.dataset.state === '1' }),
+          body: JSON.stringify({ app_id: selectedAppId, key: b.dataset.revoke, revoked: b.dataset.state === '1' }),
         });
         if (ok) { toast('License updated'); renderLicenses(); }
       };
@@ -393,10 +530,14 @@
     pageContent.querySelectorAll('[data-del-key]').forEach((b) => {
       b.onclick = async () => {
         if (!confirm('Delete this license key permanently?')) return;
-        const { ok } = await api('admin-keys?key=' + encodeURIComponent(b.dataset.delKey), { method: 'DELETE' });
+        const { ok } = await api('admin-keys?key=' + encodeURIComponent(b.dataset.delKey) + '&app_id=' + encodeURIComponent(selectedAppId), { method: 'DELETE' });
         if (ok) { toast('Key deleted'); renderLicenses(); }
       };
     });
+    bindAppSelector();
+    } catch (err) {
+      showLoadError(err.message || 'Failed to load licenses');
+    }
   }
 
   /* ── Social Auth ── */

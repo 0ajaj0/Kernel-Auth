@@ -1,5 +1,5 @@
-const { getStore } = require('@netlify/blobs');
 const { json, readJsonBody } = require('./_shared');
+const { findLicense } = require('./_store');
 
 function normalizeKey(key) {
   return String(key || '').trim().toUpperCase();
@@ -16,22 +16,20 @@ exports.handler = async (event) => {
   try {
     const body = await readJsonBody(event);
     const licenseKey = normalizeKey(body.license_key);
+    const appId = body.app_id || null;
 
     if (!licenseKey) return json(400, { error: 'Missing license_key' });
 
-    const store = await getStore({ name: 'kernel-licenses', consistency: 'strong' });
-    const recordRaw = await store.get(licenseKey, { type: 'json' });
+    const found = await findLicense(licenseKey, appId);
+    if (!found) return json(200, { ok: true, licensed: false });
 
-    if (!recordRaw) {
-      return json(200, { ok: true, licensed: false });
-    }
-
-    const record = typeof recordRaw === 'string' ? JSON.parse(recordRaw) : recordRaw;
+    const record = found.record;
     const valid = !record.revoked && (!record.expires_at || new Date(record.expires_at) > new Date());
 
     return json(200, {
       ok: true,
       licensed: valid,
+      app_id: found.app_id,
       subscription: record.subscription || record.product || '',
       subscription_level: record.level || '',
       expiry_date: record.expires_at || '',
