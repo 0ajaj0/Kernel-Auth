@@ -1,6 +1,7 @@
 const { json, initBlobs } = require('./_shared');
 const { authenticate, ROLES } = require('./_auth');
 const { store, getJson } = require('./_store');
+const { loadPlans, customerPayload } = require('./_plans');
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -15,7 +16,11 @@ exports.handler = async (event) => {
     let customer = null;
     if (auth.role === ROLES.CUSTOMER && auth.email) {
       const s = await store('kernel-customers');
-      customer = await getJson(s, auth.email.toLowerCase());
+      const raw = await getJson(s, auth.email.toLowerCase());
+      if (raw) {
+        const plans = await loadPlans();
+        customer = customerPayload(raw, plans);
+      }
     }
 
     return json(200, {
@@ -28,14 +33,7 @@ exports.handler = async (event) => {
         provider: auth.provider,
         picture: auth.picture,
       },
-      customer: customer ? {
-        subscription: customer.subscription,
-        subscription_label: customer.subscription_label,
-        hwid: customer.hwid,
-        hwid_status: customer.hwid_status,
-        license_keys: customer.license_keys || [],
-        api_token: customer.api_token,
-      } : null,
+      customer,
     });
   } catch (err) {
     return json(401, { ok: false, error: err.message || 'Invalid session' });

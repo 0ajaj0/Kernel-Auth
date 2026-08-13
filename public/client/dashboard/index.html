@@ -7,13 +7,14 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/assets/css/authlyx-dashboard.css" />
   <style>
-    .client-wrap { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+    .client-wrap { max-width: 960px; margin: 0 auto; padding: 32px 24px; animation: fadeIn .4s ease; }
     .client-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; flex-wrap: wrap; gap: 16px; }
     .client-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
     .client-card {
       background: var(--ax-panel, #15181E); border: 1px solid var(--ax-border, #1e293b);
-      border-radius: 12px; padding: 20px;
+      border-radius: 12px; padding: 20px; transition: border-color .2s, transform .2s;
     }
+    .client-card:hover { border-color: rgba(59,130,246,.3); transform: translateY(-2px); }
     .client-card h3 { font-size: 14px; color: var(--ax-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: .05em; }
     .client-card .value { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
     .pill { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
@@ -25,11 +26,24 @@
       background: rgba(0,0,0,.2); border-radius: 8px; margin-top: 8px; font-family: monospace; font-size: 13px;
     }
     .key-row button { margin-left: auto; }
+    .usage-row { margin-bottom: 14px; }
+    .usage-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; color: var(--ax-muted); }
+    .usage-track { height: 6px; background: rgba(255,255,255,.06); border-radius: 999px; overflow: hidden; }
+    .usage-fill { height: 100%; border-radius: 999px; transition: width .5s ease; }
     .var-list { font-size: 13px; color: var(--ax-muted); }
     .var-list div { padding: 6px 0; border-bottom: 1px solid var(--ax-border); }
     .download-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--ax-border); }
     .user-bar { display: flex; align-items: center; gap: 12px; }
-    .user-bar img { width: 40px; height: 40px; border-radius: 50%; }
+    .btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+    .slide-up { animation: slideUp .3s ease; }
+    .fade-in { animation: fadeIn .3s ease; }
+    @media (max-width: 640px) {
+      .client-wrap { padding: 16px; }
+      .client-header { flex-direction: column; align-items: flex-start; }
+    }
   </style>
 </head>
 <body style="background:var(--ax-bg,#0D0F12);color:var(--ax-text,#f1f5f9);min-height:100vh">
@@ -50,9 +64,18 @@
 
     <div class="client-grid">
       <div class="client-card">
-        <h3>Subscription</h3>
+        <h3>Account</h3>
         <div class="value" id="subLabel">Free</div>
+        <div style="margin-bottom:12px"><span class="pill active" id="statusPill">Active</span></div>
         <button class="btn btn-primary" id="upgradeBtn">Upgrade Subscription</button>
+      </div>
+      <div class="client-card">
+        <h3>Usage & Limits</h3>
+        <div id="usageSection">Loading…</div>
+        <div class="btn-row">
+          <button class="btn btn-ghost btn-sm" id="createUserBtn">+ Create User</button>
+          <button class="btn btn-ghost btn-sm" id="createLicenseBtn">+ Create License</button>
+        </div>
       </div>
       <div class="client-card">
         <h3>HWID Status</h3>
@@ -62,11 +85,11 @@
       </div>
       <div class="client-card" style="grid-column:1/-1">
         <h3>License Keys</h3>
-        <div id="keysList"><p style="color:var(--ax-muted);font-size:13px">No keys assigned yet</p></div>
+        <div id="keysList"><p style="color:var(--ax-muted);font-size:13px">Loading…</p></div>
       </div>
       <div class="client-card">
         <h3>Cloud Variables</h3>
-        <div class="var-list" id="varsList"><p style="color:var(--ax-muted)">None assigned</p></div>
+        <div class="var-list" id="varsList"><p style="color:var(--ax-muted)">Loading…</p></div>
       </div>
       <div class="client-card">
         <h3>Downloads</h3>
@@ -86,6 +109,6 @@
   <div id="toastRoot"></div>
 
   <script src="/assets/js/auth-guard.js"></script>
-  <script src="/assets/js/client-app.js?v=1"></script>
+  <script src="/assets/js/client-app.js?v=2"></script>
 </body>
 </html>

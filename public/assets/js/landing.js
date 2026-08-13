@@ -3,6 +3,7 @@
 
   const PLANS = {
     free: { id: 'free', name: 'Free', monthly: 0, yearly: 0 },
+    lite: { id: 'lite', name: 'Lite', monthly: 5, yearly: 4 },
     plus: { id: 'plus', name: 'Plus', monthly: 9, yearly: 7.2 },
     enterprise: { id: 'enterprise', name: 'Enterprise', monthly: null, yearly: null },
   };

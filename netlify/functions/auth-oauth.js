@@ -1,6 +1,7 @@
 const { json, readJsonBody, initBlobs, providerConfig, netlifyCallback, parseProfile, sendDiscordWebhook } = require('./_shared');
 const { store, getJson, setJson, appendLog } = require('./_store');
 const { ROLES, signToken, parseOAuthState } = require('./_auth');
+const { loadPlans, applySubscription, checkAccountActive } = require('./_plans');
 
 async function exchangeCode(provider, code) {
   const cfg = providerConfig(provider);
@@ -46,6 +47,7 @@ async function exchangeCode(provider, code) {
 
 async function upsertCustomer(profile, provider) {
   const s = await store('kernel-customers');
+  const plans = await loadPlans();
   const email = (profile.email || '').toLowerCase();
   const key = email || `${provider}:${profile.provider_id}`;
   let user = await getJson(s, key);
@@ -59,20 +61,25 @@ async function upsertCustomer(profile, provider) {
       provider,
       provider_id: profile.provider_id,
       role: ROLES.CUSTOMER,
-      subscription: 'free',
-      subscription_label: 'Free',
+      status: 'active',
       api_token: crypto.randomUUID().replace(/-/g, ''),
       hwid: '',
       hwid_status: 'unbound',
       license_keys: [],
+      end_users: [],
+      usage: { apps: 0, users: 0, licenses: 0 },
       created_at: new Date().toISOString(),
     };
+    applySubscription(user, 'free', plans, 'auto');
   } else {
     user.display_name = profile.display_name || user.display_name;
     user.avatar_url = profile.avatar_url || user.avatar_url;
     user.provider = provider;
     user.provider_id = profile.provider_id;
     user.last_login = new Date().toISOString();
+    if (!user.usage) user.usage = { apps: 0, users: 0, licenses: 0 };
+    if (!user.status) user.status = 'active';
+    if (!user.subscription) applySubscription(user, 'free', plans, 'auto');
   }
 
   await setJson(s, key, user);
@@ -132,6 +139,10 @@ exports.handler = async (event) => {
       redirect = '/admin/dashboard/';
     } else {
       userRecord = await upsertCustomer(profile, provider);
+      const suspended = checkAccountActive(userRecord);
+      if (!suspended.ok) {
+        return json(403, { error: suspended.error });
+      }
       redirect = '/client/dashboard/';
     }
 

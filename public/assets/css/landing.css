@@ -96,7 +96,7 @@ a { color: inherit; text-decoration: none; }
   border-radius: 999px; font-size: 12px; font-weight: 600;
 }
 
-.pricing { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.pricing { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
 .price-card.featured { border-color: rgba(59,130,246,0.45); box-shadow: var(--glow); }
 .price-card h3 { font-size: 18px; margin-bottom: 4px; }
 .price-card .price { font-size: 36px; font-weight: 800; margin: 12px 0; }

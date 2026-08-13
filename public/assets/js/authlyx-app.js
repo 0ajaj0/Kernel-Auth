@@ -6,6 +6,7 @@
 
   const NAV_APP = [
     { id: 'dashboard', icon: '◉', title: 'Overview' },
+    { id: 'customers', icon: '🌐', title: 'Customers' },
     { id: 'apps', icon: '▣', title: 'Apps' },
     { id: 'users', icon: '👤', title: 'Users' },
     { id: 'licenses', icon: '🔑', title: 'Licenses' },
@@ -31,6 +32,7 @@
 
   const PAGE_META = {
     dashboard: { title: 'Overview', desc: 'Overview of your auth platform, metrics, and recent activity.' },
+    customers: { title: 'Customers', desc: 'Manage OAuth customers — search by Gmail, assign subscriptions, suspend access.' },
     apps: { title: 'Applications', desc: 'Manage your applications and SDK credentials.' },
     users: { title: 'Users', desc: 'Manage registered users for the selected application.' },
     licenses: { title: 'Licenses', desc: 'Generate and manage license keys for your customers.' },
@@ -65,6 +67,28 @@
   let policiesDraft = null;
   let settingsDraft = null;
   const APPS_CACHE_MS = 60000;
+  const PAGE_CACHE_MS = 30000;
+  const pageCache = new Map();
+
+  function getPageCache(key) {
+    const e = pageCache.get(key);
+    if (e && Date.now() - e.t < PAGE_CACHE_MS) return e.data;
+    return null;
+  }
+  function setPageCache(key, data) { pageCache.set(key, { data, t: Date.now() }); }
+  function bustCache(prefix) {
+    for (const k of [...pageCache.keys()]) if (k.startsWith(prefix)) pageCache.delete(k);
+  }
+
+  function skeletonPage() {
+    return `<div class="ax-page-enter">
+      <div class="ax-skeleton-block" style="height:28px;width:220px;margin-bottom:20px;border-radius:8px"></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px">
+        ${Array(4).fill('<div class="ax-skeleton-block" style="height:72px;border-radius:10px"></div>').join('')}
+      </div>
+      <div class="ax-skeleton-block" style="height:240px;border-radius:12px"></div>
+    </div>`;
+  }
 
   const SDK_LANGS = ['cpp', 'csharp', 'python', 'javascript', 'go', 'rust'];
   let sdkLang = 'cpp';
@@ -273,11 +297,10 @@
     renderNav();
     const gen = ++navGen;
     const content = $('#pageContent');
-    if (content && !content.querySelector('.ax-page-head')) {
-      content.innerHTML = '<div class="ax-skeleton" style="padding:20px;color:var(--ax-muted)">Loading page…</div>';
-    }
+    if (content) content.innerHTML = skeletonPage();
     const renderers = {
       dashboard: renderDashboard,
+      customers: renderCustomers,
       apps: renderApps,
       users: renderUsers,
       licenses: renderLicenses,
@@ -523,6 +546,128 @@
     bindCopy();
   }
 
+  /* ── Customers (OAuth / Gmail) ── */
+  async function renderCustomers(gen = navGen) {
+    try {
+      const cacheKey = 'customers:';
+      let customers = getPageCache(cacheKey);
+      let plans = getPageCache('plans:');
+      if (!customers || !plans) {
+        const { ok, data } = await api('customers');
+        if (!ok) throw new Error(data.error || 'Failed to load customers');
+        if (stale(gen)) return;
+        customers = data.customers || [];
+        plans = data.plans || [];
+        setPageCache(cacheKey, customers);
+        setPageCache('plans:', plans);
+      } else if (stale(gen)) return;
+
+      let searchQ = '';
+      $('#pageContent').innerHTML = `
+        ${pageHead('customers', `<span class="ax-badge">${customers.length} TOTAL</span>`, '')}
+        <div class="ax-panel ax-page-enter">
+          <div class="ax-panel-body">
+            <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+              <input type="search" id="custSearch" placeholder="Search by Gmail or name…" style="flex:1;min-width:200px;padding:10px 14px;border-radius:8px;border:1px solid var(--ax-border);background:var(--ax-bg);color:var(--ax-text)" />
+              <button class="btn btn-primary" id="custSearchBtn">Search</button>
+              <button class="btn btn-ghost" id="custRefreshBtn">↻ Refresh</button>
+            </div>
+            <div class="ax-table-wrap">
+              <table class="ax-table">
+                <thead><tr><th>Email</th><th>Name</th><th>Plan</th><th>Status</th><th>Usage</th><th>Last Login</th><th>Actions</th></tr></thead>
+                <tbody id="custTableBody">${renderCustomerRows(customers)}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>`;
+
+      function renderCustomerRows(list) {
+        if (!list.length) return '<tr><td colspan="7"><div class="ax-empty">No customers yet — they appear after Google login</div></td></tr>';
+        return list.map((c) => `
+          <tr data-email="${esc(c.email)}">
+            <td><strong>${esc(c.email)}</strong></td>
+            <td>${esc(c.display_name || '—')}</td>
+            <td><span class="ax-badge blue">${esc(c.subscription_label || c.subscription)}</span></td>
+            <td><span class="ax-badge ${c.status === 'suspended' ? 'red' : 'green'}">${esc(c.status || 'active')}</span></td>
+            <td style="font-size:12px;color:var(--ax-muted)">${c.usage?.users ?? 0}/${c.limits?.max_users ?? '—'} users · ${c.usage?.licenses ?? 0}/${c.limits?.max_licenses ?? '—'} lic</td>
+            <td style="font-size:12px">${fmtDate(c.last_login || c.created_at)}</td>
+            <td>
+              <button class="btn btn-ghost btn-sm" data-manage="${esc(c.email)}">Manage</button>
+            </td>
+          </tr>`).join('');
+      }
+
+      async function doSearch() {
+        searchQ = $('#custSearch').value.trim();
+        const { ok, data } = await api('customers' + (searchQ ? '?q=' + encodeURIComponent(searchQ) : ''));
+        if (!ok) { toast(data.error || 'Search failed', 'error'); return; }
+        customers = data.customers || [];
+        bustCache('customers:');
+        setPageCache('customers:', customers);
+        $('#custTableBody').innerHTML = renderCustomerRows(customers);
+        bindManageButtons();
+      }
+
+      function bindManageButtons() {
+        $$('[data-manage]').forEach((btn) => {
+          btn.onclick = () => openCustomerModal(btn.dataset.manage, plans);
+        });
+      }
+
+      function openCustomerModal(email, planList) {
+        const c = customers.find((x) => x.email === email);
+        if (!c) return;
+        const tierOptions = (planList || plans).map((p) =>
+          `<option value="${esc(p.id)}"${p.id === c.subscription ? ' selected' : ''}>${esc(p.label || p.name)} (${p.max_users} users, ${p.max_licenses} licenses)</option>`
+        ).join('');
+        const close = showModal(`<div class="modal slide-up" style="max-width:480px">
+          <h2>Manage Customer</h2>
+          <div style="display:flex;align-items:center;gap:12px;margin:16px 0">
+            ${c.avatar_url ? `<img src="${esc(c.avatar_url)}" style="width:48px;height:48px;border-radius:50%" />` : ''}
+            <div><strong>${esc(c.display_name || email)}</strong><br/><span style="color:var(--ax-muted);font-size:13px">${esc(email)}</span></div>
+          </div>
+          <div class="field"><label>Current Plan</label><input readonly value="${esc(c.subscription_label)}" /></div>
+          <div class="field"><label>Change Subscription</label>
+            <select id="mCustSub">${tierOptions}</select>
+          </div>
+          <div class="field"><label>Status</label>
+            <select id="mCustStatus"><option value="active"${c.status !== 'suspended' ? ' selected' : ''}>Active</option><option value="suspended"${c.status === 'suspended' ? ' selected' : ''}>Suspended</option></select>
+          </div>
+          <div class="modal-actions" style="display:flex;gap:8px;margin-top:16px">
+            <button class="btn btn-primary" id="mCustSave">Save Changes</button>
+            <button class="btn btn-ghost" data-close>Cancel</button>
+          </div>
+        </div>`);
+
+        $('#mCustSave').onclick = async () => {
+          const tier = $('#mCustSub').value;
+          const status = $('#mCustStatus').value;
+          const btn = $('#mCustSave');
+          btn.disabled = true;
+          btn.textContent = 'Saving…';
+          const { ok, data } = await api('customers', {
+            method: 'PATCH',
+            body: JSON.stringify({ email, subscription: tier, action: 'assign_subscription', status }),
+          });
+          btn.disabled = false;
+          btn.textContent = 'Save Changes';
+          if (!ok) { toast(data.error || 'Update failed', 'error'); return; }
+          close();
+          toast(data.message || 'Subscription updated');
+          bustCache('customers:');
+          renderCustomers(gen);
+        };
+      }
+
+      $('#custSearchBtn').onclick = doSearch;
+      $('#custSearch').onkeydown = (e) => { if (e.key === 'Enter') doSearch(); };
+      $('#custRefreshBtn').onclick = () => { bustCache('customers:'); bustCache('plans:'); renderCustomers(gen); };
+      bindManageButtons();
+    } catch (err) {
+      if (!stale(gen)) showLoadError(err.message);
+    }
+  }
+
   /* ── Users ── */
   async function renderUsers(gen = navGen) {
     try {
@@ -608,9 +753,15 @@
   async function renderLicenses() {
     try {
       await loadApps();
-      const { ok, data } = await api('admin-keys?app_id=' + encodeURIComponent(selectedAppId));
-      if (!ok) throw new Error(data.error || 'Failed');
-      let keys = data.keys || [];
+      const cacheKey = 'licenses:' + selectedAppId;
+      let keys = getPageCache(cacheKey);
+      if (!keys) {
+        const { ok, data } = await api('admin-keys?app_id=' + encodeURIComponent(selectedAppId));
+        if (!ok) throw new Error(data.error || 'Failed');
+        keys = data.keys || [];
+        setPageCache(cacheKey, keys);
+      }
+      if (stale(gen)) return;
 
       $('#pageContent').innerHTML = `
         ${pageHead('licenses', `<span class="ax-badge">${keys.length} TOTAL</span><span class="ax-badge green">${keys.filter(k => !k.revoked).length} ACTIVE</span>`, `<button class="btn btn-primary" id="genKeyBtn">+ New License</button>`)}
@@ -666,17 +817,17 @@
             if (!ok) return toast(d.error || 'Failed', 'error');
             lastKey = d.license_key || key;
           }
-          toast(bulk > 1 ? `Generated ${bulk} keys` : 'Key created: ' + lastKey); $('#modalRoot').innerHTML = ''; renderLicenses();
+          toast(bulk > 1 ? `Generated ${bulk} keys` : 'Key created: ' + lastKey); bustCache('licenses:'); $('#modalRoot').innerHTML = ''; renderLicenses();
         };
       };
       $$('[data-revoke]').forEach((b) => b.onclick = async () => {
         const { ok } = await api('admin-keys', { method: 'PATCH', body: JSON.stringify({ app_id: selectedAppId, key: b.dataset.revoke, revoked: b.dataset.state === '1' }) });
-        if (ok) { toast('Updated'); renderLicenses(); }
+        if (ok) { toast('Updated'); bustCache('licenses:'); renderLicenses(); }
       });
       $$('[data-del-key]').forEach((b) => b.onclick = async () => {
         if (!confirm('Delete key?')) return;
         const { ok } = await api('admin-keys?key=' + encodeURIComponent(b.dataset.delKey) + '&app_id=' + encodeURIComponent(selectedAppId), { method: 'DELETE' });
-        if (ok) { toast('Deleted'); renderLicenses(); }
+        if (ok) { toast('Deleted'); bustCache('licenses:'); renderLicenses(); }
       });
       $('#exportKeys').onclick = () => copyText(JSON.stringify(keys, null, 2));
       $('#clearExpiredKeys').onclick = async () => {
@@ -684,7 +835,7 @@
         if (!expired.length) return toast('No expired keys');
         if (!confirm(`Delete ${expired.length} expired keys?`)) return;
         for (const k of expired) await api('admin-keys?key=' + encodeURIComponent(k.key) + '&app_id=' + encodeURIComponent(selectedAppId), { method: 'DELETE' });
-        toast('Cleared'); renderLicenses();
+        toast('Cleared'); bustCache('licenses:'); renderLicenses();
       };
     } catch (err) { showLoadError(err.message); }
   }
