@@ -75,12 +75,15 @@ exports.handler = async (event) => {
     const profile = await exchangeCode(provider, code);
     if (!profile?.email) return json(400, { error: 'Could not retrieve email from provider' });
 
-    const adminEmail = process.env.KERNEL_ADMIN_EMAIL || '';
+    const adminEmail = (process.env.KERNEL_ADMIN_EMAIL || '').trim();
     const adminPass = process.env.KERNEL_ADMIN_PASSWORD || '';
-    if (!adminPass) return json(500, { error: 'Admin password not configured' });
+    if (!adminPass) return json(500, { error: 'Admin password not configured (set KERNEL_ADMIN_PASSWORD in Netlify)' });
 
+    // Only restrict when KERNEL_ADMIN_EMAIL is explicitly set.
     if (adminEmail && profile.email.toLowerCase() !== adminEmail.toLowerCase()) {
-      return json(403, { error: 'This Google account is not authorized for dashboard access' });
+      return json(403, {
+        error: `Google account ${profile.email} is not authorized. Set KERNEL_ADMIN_EMAIL to this address in Netlify, or remove KERNEL_ADMIN_EMAIL to allow any Google account.`,
+      });
     }
 
     const s = await store('kernel-dashboard-users');

@@ -21,13 +21,6 @@ exports.handler = async (event) => {
     const deviceList = await devices.list();
     const teamList = await team.list();
     const apps = await listApps();
-
-    let activeLicenses = 0;
-    for (const b of licenseList.blobs) {
-      const r = await getJson(licenses, b.key);
-      if (r && !r.revoked) activeLicenses++;
-    }
-
     const staff = teamList.blobs.filter((b) => b.key.startsWith('staff:')).length;
     const resellers = teamList.blobs.filter((b) => b.key.startsWith('resellers:')).length;
 
@@ -37,7 +30,7 @@ exports.handler = async (event) => {
         apps: apps.length,
         users: userList.blobs.length,
         licenses: licenseList.blobs.length,
-        active_licenses: activeLicenses,
+        active_licenses: licenseList.blobs.length,
         devices: deviceList.blobs.length,
         staff,
         resellers,

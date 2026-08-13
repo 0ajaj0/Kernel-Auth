@@ -10,6 +10,14 @@ exports.handler = async (event) => {
   const cfg = providerConfig(provider);
 
   if (!cfg || !cfg.clientId) {
+    const state = event.queryStringParameters?.state || '';
+    if (state.startsWith('dashboard-')) {
+      return {
+        statusCode: 302,
+        headers: { Location: '/dashboard/?oauth_error=google_not_configured' },
+        body: '',
+      };
+    }
     return json(400, { error: `${provider} is not configured on KERNEL Auth` });
   }
 

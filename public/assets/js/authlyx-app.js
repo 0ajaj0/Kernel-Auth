@@ -60,6 +60,11 @@
   let apps = [];
   let selectedAppId = sessionStorage.getItem('kernel_selected_app') || '';
   let viewMode = 'list';
+  let navGen = 0;
+  let appsLoadedAt = 0;
+  let policiesDraft = null;
+  let settingsDraft = null;
+  const APPS_CACHE_MS = 60000;
 
   const $ = (sel, root) => (root || document).querySelector(sel);
   const $$ = (sel, root) => [...(root || document).querySelectorAll(sel)];
@@ -127,23 +132,23 @@
     selectedAppId = id;
     sessionStorage.setItem('kernel_selected_app', id);
     syncAppSelectors();
-    navigate(currentPage);
-  }
-
-  function syncAppSelectors() {
-    const sel = $('#appSelectorTop');
-    if (!sel) return;
-    sel.innerHTML = apps.length
-      ? apps.map((a) => `<option value="${esc(a.id)}"${a.id === selectedAppId ? ' selected' : ''}>${esc(a.app_name)}</option>`).join('')
-      : '<option value="">No apps</option>';
-    sel.onchange = () => setSelectedApp(sel.value);
+    policiesDraft = null;
+    settingsDraft = null;
+    if (currentPage === 'apps') paintAppsTable();
+    else navigate(currentPage);
   }
 
   async function loadApps(force) {
-    if (force) apps = [];
+    const now = Date.now();
+    if (!force && apps.length && now - appsLoadedAt < APPS_CACHE_MS) {
+      syncAppSelectors();
+      return apps;
+    }
     const r = await api('applications');
     if (r.ok && Array.isArray(r.data.apps)) apps = r.data.apps;
     else if (r.ok && r.data.app) apps = [r.data.app];
+    else apps = [];
+    appsLoadedAt = now;
     if (!apps.find((a) => a.id === selectedAppId)) {
       selectedAppId = apps[0]?.id || '';
       if (selectedAppId) sessionStorage.setItem('kernel_selected_app', selectedAppId);
@@ -151,6 +156,10 @@
     }
     syncAppSelectors();
     return apps;
+  }
+
+  function stale(gen) {
+    return gen !== navGen;
   }
 
   function breadcrumb(page) {
@@ -219,9 +228,23 @@
     $$('.ax-nav-item', nav).forEach((btn) => btn.addEventListener('click', () => navigate(btn.dataset.page)));
   }
 
-  function navigate(page) {
+  function syncAppSelectors() {
+    const sel = $('#appSelectorTop');
+    if (!sel) return;
+    sel.innerHTML = apps.length
+      ? apps.map((a) => `<option value="${esc(a.id)}"${a.id === selectedAppId ? ' selected' : ''}>${esc(a.app_name)}</option>`).join('')
+      : '<option value="">No apps</option>';
+    sel.onchange = () => setSelectedApp(sel.value);
+  }
+
+  async function navigate(page) {
     currentPage = page;
     renderNav();
+    const gen = ++navGen;
+    const content = $('#pageContent');
+    if (content && !content.querySelector('.ax-page-head')) {
+      content.innerHTML = '<div class="ax-skeleton" style="padding:20px;color:var(--ax-muted)">Loading page…</div>';
+    }
     const renderers = {
       dashboard: renderDashboard,
       apps: renderApps,
@@ -230,21 +253,24 @@
       device: renderDevices,
       subscriptions: renderSubscriptions,
       variables: renderVariables,
-      chats: () => renderTeamPage('chats', 'Chats'),
+      chats: () => renderTeamPage('chats', 'Chats', gen),
       sessions: renderSessions,
       logs: renderLogs,
-      files: () => renderTeamPage('files', 'Files'),
+      files: () => renderTeamPage('files', 'Files', gen),
       policies: renderPolicies,
       social: renderSocial,
       settings: renderSettings,
-      apikey: () => renderTeamPage('apikey', 'Elite Key'),
-      bots: () => renderTeamPage('bots', 'Bots'),
-      audit: () => renderTeamPage('audit', 'Audit Logs'),
-      staff: () => renderTeamPage('staff', 'Staff'),
-      resellers: () => renderTeamPage('resellers', 'Resellers'),
+      apikey: () => renderTeamPage('apikey', 'Elite Key', gen),
+      bots: () => renderTeamPage('bots', 'Bots', gen),
+      audit: () => renderTeamPage('audit', 'Audit Logs', gen),
+      staff: () => renderTeamPage('staff', 'Staff', gen),
+      resellers: () => renderTeamPage('resellers', 'Resellers', gen),
     };
-    ($('#pageContent')).innerHTML = '<p style="color:var(--ax-muted);padding:20px">Loading…</p>';
-    (renderers[page] || renderDashboard)();
+    try {
+      await (renderers[page] || renderDashboard)(gen);
+    } catch (err) {
+      if (!stale(gen)) showLoadError(err.message || 'Page failed to load');
+    }
   }
 
   function showLoadError(msg) {
@@ -253,9 +279,10 @@
   }
 
   /* ── Dashboard ── */
-  async function renderDashboard() {
+  async function renderDashboard(gen = navGen) {
     try {
       const [{ data: statsD }, { data: logsD }] = await Promise.all([api('stats'), api('logs')]);
+      if (stale(gen)) return;
       const s = statsD.stats || {};
       const logs = (logsD.logs || []).slice(0, 12);
       const app = selectedApp();
@@ -337,33 +364,71 @@
     });
   }
 
+  function appsTableRows() {
+    return apps.length ? apps.map((a) => `
+      <tr data-search="${esc((a.app_name + a.id).toLowerCase())}" data-app-id="${esc(a.id)}">
+        <td><strong>${esc(a.app_name)}</strong>${a.id === selectedAppId ? ' <span class="ax-badge blue">Active</span>' : ''}</td>
+        <td><code style="font-size:11px">${esc(String(a.owner_id).slice(0, 12))}…</code></td>
+        <td>${esc(a.version || '1.0')}</td>
+        <td>${fmtDate(a.created_at)}</td>
+        <td>
+          <button class="btn btn-ghost btn-sm" data-use-app="${esc(a.id)}">Use</button>
+          <button class="btn btn-ghost btn-sm" data-view-app="${esc(a.id)}">Credentials</button>
+          <button class="btn btn-danger-ghost btn-sm" data-del-app="${esc(a.id)}">Delete</button>
+        </td>
+      </tr>`).join('') : '<tr><td colspan="5"><div class="ax-empty">No applications yet</div></td></tr>';
+  }
+
+  function bindAppsTableEvents(site) {
+    $$('[data-use-app]').forEach((b) => b.onclick = () => { setSelectedApp(b.dataset.useApp); toast('Active app updated'); });
+    $$('[data-view-app]').forEach((b) => b.onclick = () => showAppCredentials(b.dataset.viewApp, site));
+    $$('[data-del-app]').forEach((b) => b.onclick = async () => {
+      const id = b.dataset.delApp;
+      if (!confirm('Delete this application permanently?')) return;
+      b.disabled = true;
+      const { ok, data: d } = await api('applications?id=' + encodeURIComponent(id), { method: 'DELETE' });
+      if (!ok) { b.disabled = false; return toast(d.error || 'Delete failed', 'error'); }
+      apps = apps.filter((a) => a.id !== id);
+      appsLoadedAt = Date.now();
+      if (selectedAppId === id) {
+        selectedAppId = apps[0]?.id || '';
+        if (selectedAppId) sessionStorage.setItem('kernel_selected_app', selectedAppId);
+        else sessionStorage.removeItem('kernel_selected_app');
+        syncAppSelectors();
+      }
+      toast('Application deleted');
+      paintAppsTable();
+    });
+  }
+
+  function paintAppsTable() {
+    const site = config?.site_url || location.origin;
+    const body = $('#appsBody');
+    const badge = $('#appsCountBadge');
+    if (body) {
+      body.innerHTML = appsTableRows();
+      bindAppsTableEvents(site);
+    } else if (currentPage === 'apps') {
+      renderApps(navGen);
+    }
+    if (badge) badge.textContent = apps.length + ' TOTAL';
+  }
+
   /* ── Apps ── */
-  async function renderApps() {
+  async function renderApps(gen = navGen) {
     try {
       if (!config) { const c = await api('config'); if (c.ok) config = c.data; }
       await loadApps(true);
+      if (stale(gen)) return;
       const site = config?.site_url || location.origin;
 
       $('#pageContent').innerHTML = `
-        ${pageHead('apps', `<span class="ax-badge">${apps.length} TOTAL</span>`, `<button class="btn btn-primary" id="createAppBtn">+ New App</button>`)}
+        ${pageHead('apps', `<span class="ax-badge" id="appsCountBadge">${apps.length} TOTAL</span>`, `<button class="btn btn-primary" id="createAppBtn">+ New App</button>`)}
         ${toolbar(`<button class="btn btn-ghost btn-sm" id="exportApps">Export All</button>`)}
         <div class="ax-panel">
           <table class="ax-table">
             <thead><tr><th>App Name</th><th>Owner ID</th><th>Version</th><th>Created</th><th></th></tr></thead>
-            <tbody id="appsBody">
-              ${apps.length ? apps.map((a) => `
-                <tr data-search="${esc((a.app_name + a.id).toLowerCase())}">
-                  <td><strong>${esc(a.app_name)}</strong>${a.id === selectedAppId ? ' <span class="ax-badge blue">Active</span>' : ''}</td>
-                  <td><code style="font-size:11px">${esc(String(a.owner_id).slice(0, 12))}…</code></td>
-                  <td>${esc(a.version || '1.0')}</td>
-                  <td>${fmtDate(a.created_at)}</td>
-                  <td>
-                    <button class="btn btn-ghost btn-sm" data-use-app="${esc(a.id)}">Use</button>
-                    <button class="btn btn-ghost btn-sm" data-view-app="${esc(a.id)}">Credentials</button>
-                    <button class="btn btn-danger-ghost btn-sm" data-del-app="${esc(a.id)}">Delete</button>
-                  </td>
-                </tr>`).join('') : '<tr><td colspan="5"><div class="ax-empty">No applications yet</div></td></tr>'}
-            </tbody>
+            <tbody id="appsBody">${appsTableRows()}</tbody>
           </table>
         </div>`;
 
@@ -384,24 +449,15 @@
           toast('Application created');
           $('#modalRoot').innerHTML = '';
           apps.push(d.app);
+          appsLoadedAt = Date.now();
           setSelectedApp(d.app.id);
         };
       };
 
-      $$('[data-use-app]').forEach((b) => b.onclick = () => { setSelectedApp(b.dataset.useApp); toast('Active app updated'); });
-      $$('[data-view-app]').forEach((b) => b.onclick = () => showAppCredentials(b.dataset.viewApp, site));
-      $$('[data-del-app]').forEach((b) => b.onclick = async () => {
-        if (!confirm('Delete this application?')) return;
-        const { ok, data: d } = await api('applications?id=' + encodeURIComponent(b.dataset.delApp), { method: 'DELETE' });
-        if (!ok) return toast(d.error || 'Delete failed', 'error');
-        apps = apps.filter((a) => a.id !== b.dataset.delApp);
-        if (selectedAppId === b.dataset.delApp) selectedAppId = apps[0]?.id || '';
-        toast('Application deleted');
-        renderApps();
-      });
+      bindAppsTableEvents(site);
       $('#exportApps').onclick = () => { copyText(JSON.stringify(apps, null, 2)); };
     } catch (err) {
-      showLoadError(err.message);
+      if (!stale(gen)) showLoadError(err.message);
     }
   }
 
@@ -412,16 +468,19 @@
     showModal(`<div class="modal" style="max-width:560px"><h2>${esc(app.app_name)}</h2>
       <div class="field"><label>Owner ID</label><div class="cred-box">${esc(app.owner_id)}<button class="btn btn-ghost btn-sm" data-copy="${esc(app.owner_id)}" style="margin-top:8px">Copy</button></div></div>
       <div class="field"><label>App Secret</label><div class="cred-box">${esc(app.secret)}<button class="btn btn-ghost btn-sm" data-copy="${esc(app.secret)}" style="margin-top:8px">Copy</button></div></div>
-      <div class="field"><label>Init URL</label><div class="cred-box">${esc(site)}/api/v2-init</div></div>
+      <div class="field"><label>Init URL</label><div class="cred-box">${esc(site)}/api/v2/init</div></div>
+      <div class="field"><label>Login URL</label><div class="cred-box">${esc(site)}/api/v2/login</div></div>
       <div class="modal-actions"><button class="btn btn-primary" data-close>Done</button></div></div>`);
     bindCopy();
   }
 
   /* ── Users ── */
-  async function renderUsers() {
+  async function renderUsers(gen = navGen) {
     try {
-      await loadApps();
+      if (!selectedAppId) await loadApps();
+      else await loadApps(false);
       const { ok, data } = await api('users?app_id=' + encodeURIComponent(selectedAppId));
+      if (stale(gen)) return;
       if (!ok) throw new Error(data.error || 'Failed to load users');
       let users = data.users || [];
 
@@ -709,12 +768,16 @@
   }
 
   /* ── Policies ── */
-  async function renderPolicies() {
+  async function renderPolicies(gen = navGen) {
     try {
-      await loadApps();
-      const { ok, data } = await api('policies?app_id=' + encodeURIComponent(selectedAppId));
-      if (!ok) throw new Error(data.error || 'Failed');
-      const p = data.policies || {};
+      if (!selectedAppId) await loadApps();
+      if (!policiesDraft) {
+        const { ok, data } = await api('policies?app_id=' + encodeURIComponent(selectedAppId));
+        if (!ok) throw new Error(data.error || 'Failed');
+        policiesDraft = { ...(data.policies || {}) };
+      }
+      if (stale(gen)) return;
+      const p = policiesDraft;
 
       $('#pageContent').innerHTML = `
         ${pageHead('policies')}
@@ -740,11 +803,10 @@
 
       $$('#policyTabs button').forEach((b) => {
         b.onclick = () => {
+          syncPoliciesFromDom();
           $$('#policyTabs button').forEach((x) => x.classList.remove('active'));
           b.classList.add('active');
           $('#policyContent').innerHTML = tabData[b.dataset.tab];
-          if (b.dataset.tab !== 'location') $('#savePolicies').onclick = savePoliciesHandler;
-          else { $('#savePolicies').onclick = savePoliciesHandler; }
         };
       });
 
@@ -754,18 +816,24 @@
         return el.value.split('\n').map((s) => s.trim()).filter(Boolean);
       }
 
-      async function savePoliciesHandler() {
-        const body = {
-          app_id: selectedAppId,
-          ip_whitelist: parseLines('ipWhitelist'),
-          ip_blacklist: parseLines('ipBlacklist'),
-          hwid_whitelist: parseLines('hwidWhitelist'),
-          hwid_blacklist: parseLines('hwidBlacklist'),
-          vpn_block: $('#vpnBlock')?.checked || false,
-          country_block: parseLines('countryBlock'),
+      function syncPoliciesFromDom() {
+        policiesDraft = {
+          ...(policiesDraft || {}),
+          ip_whitelist: parseLines('ipWhitelist').length ? parseLines('ipWhitelist') : (policiesDraft?.ip_whitelist || []),
+          ip_blacklist: parseLines('ipBlacklist').length ? parseLines('ipBlacklist') : (policiesDraft?.ip_blacklist || []),
+          hwid_whitelist: parseLines('hwidWhitelist').length ? parseLines('hwidWhitelist') : (policiesDraft?.hwid_whitelist || []),
+          hwid_blacklist: parseLines('hwidBlacklist').length ? parseLines('hwidBlacklist') : (policiesDraft?.hwid_blacklist || []),
+          vpn_block: $('#vpnBlock') ? $('#vpnBlock').checked : (policiesDraft?.vpn_block || false),
+          country_block: parseLines('countryBlock').length ? parseLines('countryBlock') : (policiesDraft?.country_block || []),
         };
+      }
+
+      async function savePoliciesHandler() {
+        syncPoliciesFromDom();
+        const body = { app_id: selectedAppId, ...policiesDraft };
         const { ok, data: d } = await api('policies?app_id=' + encodeURIComponent(selectedAppId), { method: 'PUT', body: JSON.stringify(body) });
         if (!ok) return toast(d.error || 'Failed', 'error');
+        policiesDraft = d.policies || policiesDraft;
         toast('Policies saved');
       }
       $('#savePolicies').onclick = savePoliciesHandler;
@@ -886,9 +954,10 @@
   }
 
   /* ── Team pages (generic CRUD) ── */
-  async function renderTeamPage(type, label) {
+  async function renderTeamPage(type, label, gen = navGen) {
     try {
       const { ok, data } = await api('team?type=' + encodeURIComponent(type));
+      if (stale(gen)) return;
       if (!ok) throw new Error(data.error || 'Failed');
       const items = data.items || [];
       const pageId = type === 'chats' ? 'chats' : type === 'files' ? 'files' : type;
@@ -995,9 +1064,27 @@
   }
 
   function startGoogleLogin() {
+    if (!config?.oauth?.google?.enabled) {
+      toast('Google OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Netlify.', 'error');
+      return;
+    }
     const state = 'dashboard-' + crypto.randomUUID();
     sessionStorage.setItem('kernel_oauth_state', state);
     window.location.href = '/api/oauth-start?provider=google&state=' + encodeURIComponent(state);
+  }
+
+  function showOAuthLoginError() {
+    const params = new URLSearchParams(location.search);
+    const err = params.get('oauth_error');
+    if (!err) return;
+    const el = $('#loginError');
+    if (!el) return;
+    const messages = {
+      google_not_configured: 'Google OAuth is not configured on the server. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Netlify environment variables.',
+    };
+    el.textContent = messages[err] || decodeURIComponent(err);
+    el.classList.remove('hidden');
+    history.replaceState({}, '', location.pathname);
   }
 
   /* ── Init ── */
@@ -1005,6 +1092,8 @@
   $('#loginPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
   $('#googleLoginBtn').addEventListener('click', startGoogleLogin);
   $('#logoutBtn').addEventListener('click', logout);
+  $('#linkInvites')?.addEventListener('click', (e) => { e.preventDefault(); toast('Invites coming soon — use Staff/Resellers for now'); });
+  $('#linkSupport')?.addEventListener('click', (e) => { e.preventDefault(); window.open('https://discord.com', '_blank'); });
 
   $('#modeApp').addEventListener('click', () => {
     mode = 'app';
@@ -1030,9 +1119,14 @@
     currentPage = NAV_TEAM.find((n) => n.id === currentPage)?.id ? currentPage : 'apikey';
   }
 
-  fetch('/api/config').then((r) => r.json()).then((d) => { config = d; }).catch(() => {});
+  fetch('/api/config').then((r) => r.json()).then((d) => { config = d; showOAuthLoginError(); }).catch(() => {});
 
   if (token) {
-    api('stats').then(({ ok }) => { if (ok) showApp(); else logout(); });
+    api('admin-keys?app_id=' + encodeURIComponent(selectedAppId || 'default')).then(({ ok }) => {
+      if (ok) showApp();
+      else logout();
+    });
+  } else {
+    showOAuthLoginError();
   }
 })();

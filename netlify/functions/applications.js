@@ -63,7 +63,8 @@ exports.handler = async (event) => {
       const id = event.queryStringParameters?.id;
       if (!id) return json(400, { ok: false, error: 'Missing id' });
       await deleteApp(id);
-      return json(200, { ok: true, deleted: id });
+      const apps = await listApps();
+      return json(200, { ok: true, deleted: id, apps });
     }
 
     return json(405, { ok: false, error: 'Method not allowed' });

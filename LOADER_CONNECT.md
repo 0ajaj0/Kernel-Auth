@@ -1,118 +1,53 @@
-# Loader Connect — তোমাকে কী কী দিতে হবে
+# KERNEL Auth — Loader Connection Guide
 
-Netlify deploy করার পর loader-এ connect করতে এই জিনিসগুলো দাও:
+## Step 1: Dashboard থেকে credentials নাও
 
----
+1. https://kernelauth.netlify.app/dashboard/ খোলো
+2. **Apps** → তোমার app তৈরি করো
+3. **Credentials** ক্লিক → `owner_id`, `app_name`, `secret` copy করো
 
-## 1. Netlify site URL (অবশ্যই)
+## Step 2: Loader config সেট করো
 
-```
-https://YOUR-NAME.netlify.app
-```
-
-Example: `https://kernel-regedit-auth.netlify.app`
-
----
-
-## 2. OAuth credentials
-
-### Google (অবশ্যই — Continue with Google এর জন্য)
-
-Google Cloud Console থেকে:
-
-- **Client ID** → loader-এ public থাকতে পারে
-- **Client Secret** → শুধু Netlify env-তে (loader-এ লাগবে না যদি server exchange use করি)
-
-**Authorized redirect URI** (Google Console-এ add কর):
-
-```
-https://YOUR-SITE.netlify.app/oauth/callback.html
+```powershell
+Copy-Item "$env:USERPROFILE\Desktop\UIEngine\UIEngine\assets\kernel_auth.ini.example" "$env:APPDATA\KERNEL\kernel_auth.ini"
 ```
 
----
+`kernel_auth.ini` edit করো — dashboard credentials বসাও।
 
-## 3. Admin password
+## Step 3: Google OAuth (Loader Social Login)
 
-`KERNEL_ADMIN_PASSWORD` — license key বানানোর জন্য admin panel-এ use হবে।
+1. `%AppData%\KERNEL\oauth.ini` এ Google `client_id` + `client_secret` বসাও
+2. Google Cloud Console এ redirect URI:
+   - `http://127.0.0.1:42891/callback` (loader)
+   - `https://kernelauth.netlify.app/oauth/callback.html` (dashboard)
 
----
+## Step 4: Netlify Environment Variables
 
-## 4. License system — কোনটা use করবে?
+| Variable | Purpose |
+|----------|---------|
+| `KERNEL_ADMIN_PASSWORD` | Dashboard password login |
+| `KERNEL_SITE_URL` | `https://kernelauth.netlify.app` |
+| `GOOGLE_CLIENT_ID` | Dashboard + OAuth |
+| `GOOGLE_CLIENT_SECRET` | Dashboard + OAuth |
+| `KERNEL_ADMIN_EMAIL` | (optional) শুধু এই Gmail dashboard login করতে পারবে |
 
-### Option A: KERNEL Auth keys (এই project)
+## API Endpoints (AuthlyX compatible)
 
-- Admin panel থেকে key বানাবে
-- Loader `/api/license-activate` call করবে
-- AuthlyX লাগবে না
+| Endpoint | URL |
+|----------|-----|
+| Init | `POST /api/v2/init` |
+| Login | `POST /api/v2/login` |
+| Register | `POST /api/v2/register` |
+| License | `POST /api/v2/licenses` |
+| Extend | `POST /api/v2/extend` |
 
-### Option B: AuthlyX (আগের মতো)
+## Deploy
 
-Netlify env-তে দাও:
-
-```
-AUTHLYX_OWNER_ID=
-AUTHLYX_APP_NAME=
-AUTHLYX_VERSION=1.0
-AUTHLYX_SECRET=
-```
-
-Loader AuthlyX SDK দিয়ে key validate করবে — KERNEL Auth শুধু OAuth UI/hosting।
-
-### Option C: দুটো একসাথে
-
-- OAuth → KERNEL Auth (Netlify)
-- License → AuthlyX
-
----
-
-## 5. Discord / GitHub (optional)
-
-Chaile daw — na dile shudhu Google cholbe.
-
-Discord redirect:
-```
-https://YOUR-SITE.netlify.app/oauth/callback.html
+```powershell
+cd "$env:USERPROFILE\Desktop\kernel auth"
+git add .
+git commit -m "Fix dashboard, OAuth, delete, v2 API, loader connect"
+git push
 ```
 
-GitHub callback URL:
-```
-https://YOUR-SITE.netlify.app/oauth/callback.html
-```
-
----
-
-## 6. Loader-এ ki change hobe (ami korbo)
-
-Tomar deploy complete hole ami loader update korbo:
-
-| File | Change |
-|------|--------|
-| `%AppData%\KERNEL\oauth.ini` | `auth_base_url=https://your-site.netlify.app` |
-| `social_auth.cpp` | Browser opens Netlify `/api/oauth-start` instead of direct Google URL |
-| Optional | `client_secret` remove — exchange via `/api/oauth-exchange` |
-| Optional | License via `/api/license-activate` |
-
----
-
-## Checklist before telling me "connect koro"
-
-- [ ] Netlify site live (URL opens)
-- [ ] `/api/health` returns `{ "ok": true }`
-- [ ] Google OAuth redirect URI added
-- [ ] Env variables set on Netlify
-- [ ] Admin panel works — test key create
-- [ ] Site URL copy kore pathao
-
----
-
-## Example message to send
-
-```
-Netlify URL: https://kernel-regedit.netlify.app
-Google Client ID: 123456.apps.googleusercontent.com
-Using: AuthlyX for keys + KERNEL Auth for OAuth
-AuthlyX: owner_id=xxx, app=KERNEL, secret=xxx (DM)
-Admin password: (DM only)
-```
-
-**Never post Client Secret or AuthlyX Secret publicly — DM only.**
+Netlify deploy হলে **Ctrl+Shift+R** দিয়ে dashboard refresh করো।

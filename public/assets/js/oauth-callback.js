@@ -52,6 +52,13 @@
     subtitle.textContent = 'Verifying your Google account…';
     status.textContent = 'Exchanging authorization code';
 
+    const expected = sessionStorage.getItem('kernel_oauth_state');
+    if (!state || !expected || state !== expected) {
+      showError('OAuth security check failed. Please try Google login again from the dashboard.');
+      return;
+    }
+    sessionStorage.removeItem('kernel_oauth_state');
+
     try {
       const res = await fetch('/api/dashboard-oauth', {
         method: 'POST',

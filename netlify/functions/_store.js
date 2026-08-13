@@ -114,19 +114,36 @@ async function createApp({ app_name, version = '1.0' }) {
   return app;
 }
 
+async function removeFromAppIndex(id) {
+  const s = await store('kernel-apps');
+  const index = await getJson(s, '__index__', { ids: [] });
+  const nextIds = index.ids.filter((item) => item !== id);
+  if (nextIds.length !== index.ids.length) {
+    await setJson(s, '__index__', { ids: nextIds });
+  }
+  return nextIds;
+}
+
 async function deleteApp(id) {
   if (!id) throw new Error('Missing application id');
   const s = await store('kernel-apps');
-  const index = await getJson(s, '__index__', { ids: [] });
   const existing = await getJson(s, id);
+  const index = await getJson(s, '__index__', { ids: [] });
   const inIndex = index.ids.includes(id);
   if (!existing && !inIndex) throw new Error('Application not found');
+
+  // Update index first so listApps never returns a deleted app even if blob delete fails.
+  const nextIds = await removeFromAppIndex(id);
+
   if (existing) {
     await s.delete(id);
+    const stillThere = await getJson(s, id);
+    if (stillThere) {
+      await setJson(s, '__index__', { ids: [...nextIds, id] });
+      throw new Error('Failed to delete application from storage');
+    }
     await appendLog({ type: 'app_deleted', app_id: id, app_name: existing.app_name });
   }
-  index.ids = index.ids.filter((item) => item !== id);
-  await setJson(s, '__index__', index);
 }
 
 function licenseBlobKey(appId, licenseKey) {
