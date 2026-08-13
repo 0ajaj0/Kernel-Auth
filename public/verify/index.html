@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verifying — KERNEL Auth</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { --bg: #0D0F12; --panel: #15181E; --border: #1e293b; --text: #f1f5f9; --muted: #94a3b8; --blue: #3B82F6; --cyan: #06B6D4; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--text);
+      background: radial-gradient(ellipse 50% 40% at 50% 0%, rgba(59,130,246,0.12), transparent), var(--bg);
+    }
+    .card {
+      width: 420px; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 16px; padding: 36px; text-align: center;
+    }
+    .logo {
+      width: 44px; height: 44px; margin: 0 auto 16px; background: linear-gradient(135deg, var(--blue), var(--cyan));
+      border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 800;
+    }
+    h1 { font-size: 20px; margin-bottom: 8px; }
+    p { color: var(--muted); font-size: 14px; margin-bottom: 24px; line-height: 1.5; }
+    .spinner-wrap { position: relative; height: 56px; margin-bottom: 20px; }
+    .spinner {
+      width: 44px; height: 44px; border: 3px solid rgba(59,130,246,0.2);
+      border-top-color: var(--blue); border-radius: 50%; margin: 0 auto;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .progress { height: 4px; background: rgba(255,255,255,0.06); border-radius: 999px; overflow: hidden; margin-bottom: 16px; }
+    .progress-bar {
+      height: 100%; width: 0%; background: linear-gradient(90deg, var(--blue), var(--cyan));
+      border-radius: 999px; transition: width 0.3s;
+    }
+    .status { font-size: 13px; color: var(--cyan); font-weight: 500; }
+    .hidden { display: none; }
+    .success-icon { font-size: 48px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="logo">K</div>
+    <h1 id="title">Quick Security Check</h1>
+    <p id="subtitle">Complete this check to continue to your dashboard.</p>
+    <div id="loadingView">
+      <div class="spinner-wrap"><div class="spinner"></div></div>
+      <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="status" id="status">Verifying identity…</div>
+    </div>
+    <div id="successView" class="hidden">
+      <div class="success-icon">✓</div>
+      <div class="status" style="color:#22c55e">Verification complete</div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const steps = [
+        'Verifying identity…',
+        'Checking session integrity…',
+        'Validating OAuth token…',
+        'Preparing your dashboard…',
+      ];
+      const bar = document.getElementById('progressBar');
+      const status = document.getElementById('status');
+      let i = 0;
+      const tick = setInterval(() => {
+        if (i >= steps.length) {
+          clearInterval(tick);
+          document.getElementById('loadingView').classList.add('hidden');
+          document.getElementById('successView').classList.remove('hidden');
+          document.getElementById('title').textContent = 'Welcome back!';
+          document.getElementById('subtitle').textContent = 'Redirecting to dashboard…';
+          setTimeout(() => { window.location.href = '/dashboard/'; }, 800);
+          return;
+        }
+        status.textContent = steps[i];
+        bar.style.width = ((i + 1) / steps.length * 100) + '%';
+        i++;
+      }, 700);
+    })();
+  </script>
+</body>
+</html>

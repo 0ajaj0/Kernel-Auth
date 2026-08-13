@@ -48,6 +48,7 @@ exports.handler = async (event) => {
         hwid,
         username: body.username || '',
         ip: body.ip || '',
+        device_type: body.device_type || 'motherboard',
         status: body.status || 'active',
         created_at: new Date().toISOString(),
         app_id: appId,

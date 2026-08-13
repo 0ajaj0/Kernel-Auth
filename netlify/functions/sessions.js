@@ -28,7 +28,13 @@ exports.handler = async (event) => {
 
     if (event.httpMethod === 'DELETE') {
       const id = event.queryStringParameters?.id;
-      if (!id) return json(400, { error: 'Missing id' });
+      const all = event.queryStringParameters?.all === '1';
+      if (all) {
+        const list = await s.list();
+        for (const item of list.blobs) await s.delete(item.key);
+        return json(200, { ok: true, deleted: list.blobs.length });
+      }
+      if (!id) return json(400, { error: 'Missing id or all=1' });
       await s.delete(id);
       return json(200, { ok: true });
     }

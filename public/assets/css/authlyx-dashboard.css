@@ -1,13 +1,14 @@
 /* KERNEL Auth — AuthlyX-style dashboard theme */
 :root {
-  --ax-bg: #080b10;
-  --ax-sidebar: #0a0e14;
-  --ax-panel: #0f1419;
-  --ax-panel-2: #131a22;
-  --ax-border: rgba(255,255,255,0.06);
-  --ax-text: #e8eaed;
-  --ax-muted: #8b949e;
-  --ax-blue: #3b82f6;
+  --ax-bg: #0D0F12;
+  --ax-sidebar: #0D0F12;
+  --ax-panel: #15181E;
+  --ax-panel-2: #1a1f28;
+  --ax-border: #1e293b;
+  --ax-text: #f1f5f9;
+  --ax-muted: #94a3b8;
+  --ax-blue: #3B82F6;
+  --ax-cyan: #06B6D4;
   --ax-blue-soft: rgba(59,130,246,0.12);
   --ax-green: #22c55e;
   --ax-red: #ef4444;

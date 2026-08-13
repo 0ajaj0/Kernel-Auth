@@ -52,7 +52,7 @@ exports.handler = async (event) => {
       const blobKey = userBlobKey(appId, id);
       const durationDays = Number(body.duration_days) || 0;
       let expiresAt = body.expires_at || null;
-      if (durationDays > 0) {
+      if (!expiresAt && durationDays > 0) {
         expiresAt = new Date(Date.now() + durationDays * 86400000).toISOString();
       }
       const record = {
@@ -64,6 +64,7 @@ exports.handler = async (event) => {
         duration_days: durationDays || null,
         expires_at: expiresAt,
         hwid: body.hwid || '',
+        hwid_limit: Number(body.hwid_limit) || 1,
         banned: false,
         created_at: new Date().toISOString(),
         provider: body.provider || '',

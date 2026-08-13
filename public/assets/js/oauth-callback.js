@@ -76,7 +76,7 @@
       status.textContent = 'Redirecting to dashboard…';
       spinner.classList.add('hidden');
       setTimeout(() => {
-        window.location.href = '/dashboard/';
+        window.location.href = '/verify/';
       }, 600);
     } catch (err) {
       showError(err.message || 'Dashboard login failed');

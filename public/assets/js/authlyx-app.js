@@ -5,7 +5,7 @@
   const PROFILE_KEY = 'kernel_user_profile';
 
   const NAV_APP = [
-    { id: 'dashboard', icon: '◉', title: 'Dashboard' },
+    { id: 'dashboard', icon: '◉', title: 'Overview' },
     { id: 'apps', icon: '▣', title: 'Apps' },
     { id: 'users', icon: '👤', title: 'Users' },
     { id: 'licenses', icon: '🔑', title: 'Licenses' },
@@ -30,7 +30,7 @@
   ];
 
   const PAGE_META = {
-    dashboard: { title: 'Dashboard', desc: 'Overview of your auth platform and recent activity.' },
+    dashboard: { title: 'Overview', desc: 'Overview of your auth platform, metrics, and recent activity.' },
     apps: { title: 'Applications', desc: 'Manage your applications and SDK credentials.' },
     users: { title: 'Users', desc: 'Manage registered users for the selected application.' },
     licenses: { title: 'Licenses', desc: 'Generate and manage license keys for your customers.' },
@@ -65,6 +65,32 @@
   let policiesDraft = null;
   let settingsDraft = null;
   const APPS_CACHE_MS = 60000;
+
+  const SDK_LANGS = ['cpp', 'csharp', 'python', 'javascript', 'go', 'rust'];
+  let sdkLang = 'cpp';
+
+  function sdkSnippet(lang, app, site) {
+    const o = app?.owner_id || 'OWNER_ID';
+    const n = app?.app_name || 'AppName';
+    const s = app?.secret || 'SECRET';
+    const base = site || location.origin;
+    const map = {
+      cpp: `#include "KernelAuth.h"\nKernelAuth::KernelAuthClient auth("${o}", "${n}", "1.0", "${s}", "${base}/api");\nauth.Init();\nauth.LicenseLogin("KERNEL-XXXX");`,
+      csharp: `var auth = new KernelAuthClient("${o}", "${n}", "1.0", "${s}", "${base}/api");\nawait auth.InitAsync();\nawait auth.LicenseLoginAsync("KERNEL-XXXX");`,
+      python: `import requests\ns = requests.post("${base}/api/v1/auth/init", json={"owner_id":"${o}","app_name":"${n}"}).json()["session_id"]\nrequests.post("${base}/api/v1/auth/login", json={"session_id":s,"license_key":"KERNEL-XXXX"})`,
+      javascript: `const r = await fetch("${base}/api/v1/auth/init",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({owner_id:"${o}",app_name:"${n}"})});\nconst {session_id}=await r.json();\nawait fetch("${base}/api/v1/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id,license_key:"KERNEL-XXXX"})});`,
+      go: `http.Post("${base}/api/v1/auth/init", "application/json", body)\n// then POST ${base}/api/v1/auth/login with session_id + license_key`,
+      rust: `client.post("${base}/api/v1/auth/init").json(&init).send().await?;\nclient.post("${base}/api/v1/auth/login").json(&login).send().await?;`,
+    };
+    return map[lang] || map.cpp;
+  }
+
+  function paginate(items, page, perPage) {
+    const p = Math.max(1, page || 1);
+    const size = perPage || 10;
+    const start = (p - 1) * size;
+    return { items: items.slice(start, start + size), page: p, pages: Math.max(1, Math.ceil(items.length / size)), total: items.length };
+  }
 
   const $ = (sel, root) => (root || document).querySelector(sel);
   const $$ = (sel, root) => [...(root || document).querySelectorAll(sel)];
@@ -288,7 +314,7 @@
       const app = selectedApp();
 
       $('#pageContent').innerHTML = `
-        ${pageHead('dashboard', `<span class="ax-badge blue">LIVE</span>`)}
+        ${pageHead('dashboard', `<span class="ax-badge blue">LIVE</span>`, `<button class="btn btn-ghost btn-sm" id="refreshDash">↻ Refresh</button>`)}
         <div class="ax-stats">
           <div class="ax-stat-card"><div class="label">Total Apps</div><div class="value">${s.apps ?? 0}</div></div>
           <div class="ax-stat-card"><div class="label">Licenses</div><div class="value">${s.licenses ?? 0}</div></div>
@@ -327,6 +353,7 @@
 
       bindCopy();
       drawChart(logs);
+      $('#refreshDash').onclick = () => renderDashboard(navGen);
       $$('#chartTabs button').forEach((b) => b.onclick = () => {
         $$('#chartTabs button').forEach((x) => x.classList.remove('active'));
         b.classList.add('active');
@@ -430,6 +457,16 @@
             <thead><tr><th>App Name</th><th>Owner ID</th><th>Version</th><th>Created</th><th></th></tr></thead>
             <tbody id="appsBody">${appsTableRows()}</tbody>
           </table>
+        </div>
+        <div class="ax-panel" style="margin-top:16px;padding:20px" id="sdkPanel">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <strong>SDK Integration</strong>
+            <div class="ax-view-toggle" id="sdkLangTabs">
+              ${SDK_LANGS.map((l) => `<button type="button" data-sdk-lang="${l}" class="${l === sdkLang ? 'active' : ''}">${l.toUpperCase()}</button>`).join('')}
+            </div>
+          </div>
+          <pre class="code-block" id="sdkCodeBlock" style="margin:0;padding:16px;background:#0a0c10;border-radius:10px;overflow-x:auto;font-size:12px">${esc(sdkSnippet(sdkLang, selectedApp(), site))}</pre>
+          <button class="btn btn-ghost btn-sm" id="copySdkBtn" style="margin-top:10px">Copy Snippet</button>
         </div>`;
 
       bindToolbar((q) => {
@@ -456,6 +493,12 @@
 
       bindAppsTableEvents(site);
       $('#exportApps').onclick = () => { copyText(JSON.stringify(apps, null, 2)); };
+      $$('[data-sdk-lang]').forEach((b) => b.onclick = () => {
+        sdkLang = b.dataset.sdkLang;
+        $$('[data-sdk-lang]').forEach((x) => x.classList.toggle('active', x === b));
+        $('#sdkCodeBlock').textContent = sdkSnippet(sdkLang, selectedApp(), site);
+      });
+      $('#copySdkBtn').onclick = () => copyText(sdkSnippet(sdkLang, selectedApp(), site));
     } catch (err) {
       if (!stale(gen)) showLoadError(err.message);
     }
@@ -467,7 +510,8 @@
     const snippet = `owner_id: ${app.owner_id}\napp_name: ${app.app_name}\nsecret: ${app.secret}`;
     showModal(`<div class="modal" style="max-width:560px"><h2>${esc(app.app_name)}</h2>
       <div class="field"><label>Owner ID</label><div class="cred-box">${esc(app.owner_id)}<button class="btn btn-ghost btn-sm" data-copy="${esc(app.owner_id)}" style="margin-top:8px">Copy</button></div></div>
-      <div class="field"><label>App Secret</label><div class="cred-box">${esc(app.secret)}<button class="btn btn-ghost btn-sm" data-copy="${esc(app.secret)}" style="margin-top:8px">Copy</button></div></div>
+      <div class="field"><label>App Secret</label><div class="cred-box">${esc(app.secret)}<button class="btn btn-ghost btn-sm" data-copy="${esc(app.secret)}" style="margin-top:8px">Copy Secret Key</button></div></div>
+      <div class="field"><label>App ID / Owner ID</label><div class="cred-box">${esc(app.owner_id)}<button class="btn btn-ghost btn-sm" data-copy="${esc(app.owner_id)}" style="margin-top:8px">Copy App ID</button></div></div>
       <div class="field"><label>Init URL</label><div class="cred-box">${esc(site)}/api/v2/init</div></div>
       <div class="field"><label>Login URL</label><div class="cred-box">${esc(site)}/api/v2/login</div></div>
       <div class="modal-actions"><button class="btn btn-primary" data-close>Done</button></div></div>`);
@@ -486,7 +530,7 @@
 
       $('#pageContent').innerHTML = `
         ${pageHead('users', `<span class="ax-badge">${users.length} TOTAL</span><span class="ax-badge green">${users.filter(u => !u.banned).length} ACTIVE</span>`, `<button class="btn btn-primary" id="addUserBtn">+ New User</button>`)}
-        ${toolbar(`<button class="btn btn-ghost btn-sm" id="exportUsers">Export All</button><button class="btn btn-ghost btn-sm" id="clearExpired">Clear Expired</button>`)}
+        ${toolbar(`<select id="userStatusFilter" style="padding:8px;background:var(--ax-panel);border:1px solid var(--ax-border);border-radius:8px;color:var(--ax-text)"><option value="">All Status</option><option value="active">Active</option><option value="expired">Expired</option><option value="banned">Banned</option></select><button class="btn btn-ghost btn-sm" id="exportUsers">Export All</button><button class="btn btn-ghost btn-sm" id="clearExpired">Clear Expired</button>`)}
         <div class="ax-panel"><table class="ax-table"><thead><tr><th>Username</th><th>Email</th><th>Subscription</th><th>Expires</th><th>Status</th><th>Created</th><th></th></tr></thead>
         <tbody id="usersBody">${users.map((u) => `
           <tr data-search="${esc((u.username + u.email).toLowerCase())}" data-id="${esc(u.id)}">
@@ -504,18 +548,32 @@
         </tbody></table></div>`;
 
       bindToolbar((q) => $$('#usersBody tr[data-search]').forEach((tr) => { tr.style.display = !q || tr.dataset.search.includes(q) ? '' : 'none'; }));
+      $('#userStatusFilter')?.addEventListener('change', (e) => {
+        const v = e.target.value;
+        $$('#usersBody tr[data-search]').forEach((tr) => {
+          if (!v) { tr.style.display = ''; return; }
+          const text = tr.textContent.toLowerCase();
+          tr.style.display = (v === 'banned' && text.includes('banned')) || (v === 'active' && text.includes('active')) || (v === 'expired' && text.includes('expired')) ? '' : 'none';
+        });
+      });
       $('#addUserBtn').onclick = () => {
         showModal(`<div class="modal"><h2>New User</h2>
           <div class="field"><label>Username</label><input id="mUsername" /></div>
           <div class="field"><label>Email</label><input id="mEmail" type="email" /></div>
           <div class="field"><label>Password</label><input id="mPassword" type="password" /></div>
-          <div class="field"><label>Subscription</label><input id="mSub" value="Standard" /></div>
-          <div class="field"><label>Duration (days, 0=lifetime)</label><input id="mDuration" type="number" value="30" /></div>
+          <div class="field"><label>Subscription Tier</label><select id="mSub"><option>Standard</option><option>Premium</option><option>Enterprise</option></select></div>
+          <div class="field"><label>HWID Limit</label><input id="mHwidLimit" type="number" value="1" min="1" /></div>
+          <div class="field"><label>Expiry Date</label><input id="mExpiry" type="datetime-local" /></div>
+          <div class="field"><label>Duration (days, if no expiry)</label><input id="mDuration" type="number" value="30" min="0" placeholder="0=lifetime" /></div>
           <div class="modal-actions"><button class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" id="mSaveUser">Create</button></div></div>`);
         $('#mSaveUser').onclick = async () => {
+          const expiry = $('#mExpiry').value;
           const { ok, data: d } = await api('users', { method: 'POST', body: JSON.stringify({
             app_id: selectedAppId, username: $('#mUsername').value, email: $('#mEmail').value,
-            password: $('#mPassword').value, subscription: $('#mSub').value, duration_days: Number($('#mDuration').value) || 0,
+            password: $('#mPassword').value, subscription: $('#mSub').value,
+            duration_days: expiry ? 0 : (Number($('#mDuration').value) || 0),
+            expires_at: expiry ? new Date(expiry).toISOString() : null,
+            hwid_limit: Number($('#mHwidLimit').value) || 1,
           }) });
           if (!ok) return toast(d.error || 'Failed', 'error');
           toast('User created'); $('#modalRoot').innerHTML = ''; renderUsers();
@@ -555,7 +613,7 @@
         <div class="ax-panel"><table class="ax-table"><thead><tr><th>Key</th><th>Subscription</th><th>Activations</th><th>Email</th><th>Status</th><th>Created</th><th></th></tr></thead>
         <tbody id="keysBody">${keys.map((k) => `
           <tr data-search="${esc(k.key.toLowerCase())}">
-            <td><code>${esc(k.key)}</code> <button class="btn btn-ghost btn-sm" data-copy="${esc(k.key)}">Copy</button></td>
+            <td><code class="license-key" data-key="${esc(k.key)}">${esc(k.key.slice(0, 8))}••••</code> <button class="btn btn-ghost btn-sm" data-toggle-mask="${esc(k.key)}">Show</button> <button class="btn btn-ghost btn-sm" data-copy="${esc(k.key)}">Copy</button></td>
             <td>${esc(k.subscription || '—')}</td>
             <td>${k.activations || 0} / ${k.max_activations ?? 1}</td>
             <td>${esc(k.bound_email || '—')}</td>
@@ -570,23 +628,40 @@
 
       bindToolbar((q) => $$('#keysBody tr[data-search]').forEach((tr) => { tr.style.display = !q || tr.dataset.search.includes(q) ? '' : 'none'; }));
       bindCopy();
+      $$('[data-toggle-mask]').forEach((b) => b.onclick = () => {
+        const el = b.parentElement.querySelector('.license-key');
+        if (!el) return;
+        const full = b.dataset.toggleMask;
+        const masked = full.slice(0, 8) + '••••';
+        if (el.textContent.includes('••••')) { el.textContent = full; b.textContent = 'Hide'; }
+        else { el.textContent = masked; b.textContent = 'Show'; }
+      });
       $('#genKeyBtn').onclick = () => {
         const suggested = randomKey();
         showModal(`<div class="modal"><h2>New License</h2>
           <div class="field"><label>License Key</label><input id="mKey" value="${suggested}" /></div>
           <div class="field"><label>Subscription</label><input id="mSubName" value="KERNEL Premium" /></div>
-          <div class="field"><label>Max Activations</label><input id="mMaxAct" type="number" value="999999" /></div>
+          <div class="field"><label>Max Activations / HWID</label><input id="mMaxAct" type="number" value="999999" /></div>
+          <div class="field"><label>Bulk Count</label><input id="mBulkCount" type="number" value="1" min="1" max="50" /></div>
+          <div class="field"><label>Key Prefix</label><input id="mPrefix" value="KERNEL" /></div>
           <div class="field"><label>Expires At</label><input id="mExpires" type="datetime-local" /></div>
           <div class="modal-actions"><button class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" id="mGenSave">Generate</button></div></div>`);
         $('#mGenSave').onclick = async () => {
           const expires = $('#mExpires').value;
-          const { ok, data: d } = await api('admin-keys', { method: 'POST', body: JSON.stringify({
-            app_id: selectedAppId, license_key: $('#mKey').value, subscription: $('#mSubName').value,
-            max_activations: Number($('#mMaxAct').value) || 999999,
-            expires_at: expires ? new Date(expires).toISOString() : null,
-          }) });
-          if (!ok) return toast(d.error || 'Failed', 'error');
-          toast('Key created: ' + d.license_key); $('#modalRoot').innerHTML = ''; renderLicenses();
+          const bulk = Math.min(50, Math.max(1, Number($('#mBulkCount').value) || 1));
+          const prefix = ($('#mPrefix').value || 'KERNEL').trim().toUpperCase();
+          let lastKey = '';
+          for (let i = 0; i < bulk; i++) {
+            const key = bulk === 1 ? $('#mKey').value : `${prefix}-${randomKey().slice(7)}`;
+            const { ok, data: d } = await api('admin-keys', { method: 'POST', body: JSON.stringify({
+              app_id: selectedAppId, license_key: key, subscription: $('#mSubName').value,
+              max_activations: Number($('#mMaxAct').value) || 999999,
+              expires_at: expires ? new Date(expires).toISOString() : null,
+            }) });
+            if (!ok) return toast(d.error || 'Failed', 'error');
+            lastKey = d.license_key || key;
+          }
+          toast(bulk > 1 ? `Generated ${bulk} keys` : 'Key created: ' + lastKey); $('#modalRoot').innerHTML = ''; renderLicenses();
         };
       };
       $$('[data-revoke]').forEach((b) => b.onclick = async () => {
@@ -619,30 +694,59 @@
 
       $('#pageContent').innerHTML = `
         ${pageHead('device', `<span class="ax-badge">${devices.length} TOTAL</span>`, `<button class="btn btn-primary" id="addDeviceBtn">+ New Device</button>`)}
+        <div class="ax-tabs" id="deviceTabs">
+          <button class="active" data-dtab="motherboard">Motherboard</button>
+          <button data-dtab="processor">Processor ID</button>
+        </div>
         ${toolbar()}
-        <div class="ax-panel"><table class="ax-table"><thead><tr><th>HWID / System ID</th><th>Username</th><th>IP</th><th>Status</th><th>Created</th><th></th></tr></thead>
-        <tbody>${devices.map((d) => `
-          <tr><td><code>${esc(d.hwid)}</code></td><td>${esc(d.username || '—')}</td><td>${esc(d.ip || '—')}</td>
+        <div class="ax-panel"><table class="ax-table"><thead><tr><th>HWID / System ID</th><th>Type</th><th>Username</th><th>IP</th><th>Status</th><th>Created</th><th></th></tr></thead>
+        <tbody id="deviceBody">${devices.map((d) => `
+          <tr data-dtype="${esc((d.device_type || 'motherboard').toLowerCase())}"><td><code>${esc(d.hwid)}</code></td><td>${esc(d.device_type || 'Motherboard')}</td><td>${esc(d.username || '—')}</td><td>${esc(d.ip || '—')}</td>
           <td>${d.status === 'banned' ? '<span class="ax-badge" style="color:var(--ax-red)">Banned</span>' : '<span class="ax-badge green">Active</span>'}</td>
           <td>${fmtDate(d.created_at)}</td>
           <td>
             <button class="btn btn-ghost btn-sm" data-toggle-device="${esc(d.id)}" data-status="${d.status === 'banned' ? 'active' : 'banned'}">${d.status === 'banned' ? 'Unban' : 'Ban'}</button>
+            <button class="btn btn-ghost btn-sm" data-unbind="${esc(d.id)}" title="Reset HWID">Unbind</button>
             <button class="btn btn-danger-ghost btn-sm" data-del-device="${esc(d.id)}">Delete</button>
-          </td></tr>`).join('') || '<tr><td colspan="6"><div class="ax-empty">No devices yet</div></td></tr>'}
+          </td></tr>`).join('') || '<tr><td colspan="7"><div class="ax-empty">No devices yet</div></td></tr>'}
         </tbody></table></div>`;
+
+      let deviceTab = 'motherboard';
+      function filterDevices() {
+        $$('#deviceBody tr[data-dtype]').forEach((tr) => {
+          tr.style.display = tr.dataset.dtype === deviceTab ? '' : 'none';
+        });
+      }
+      $$('#deviceTabs button').forEach((b) => b.onclick = () => {
+        $$('#deviceTabs button').forEach((x) => x.classList.remove('active'));
+        b.classList.add('active');
+        deviceTab = b.dataset.dtab;
+        filterDevices();
+      });
+      filterDevices();
 
       $('#addDeviceBtn').onclick = () => {
         showModal(`<div class="modal"><h2>Add Device</h2>
+          <div class="field"><label>Type</label><select id="mDevType"><option value="motherboard">Motherboard</option><option value="processor">Processor ID</option></select></div>
           <div class="field"><label>HWID / System ID</label><input id="mHwid" /></div>
           <div class="field"><label>Username</label><input id="mDevUser" /></div>
           <div class="field"><label>IP</label><input id="mDevIp" /></div>
           <div class="modal-actions"><button class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" id="mSaveDev">Add</button></div></div>`);
         $('#mSaveDev').onclick = async () => {
-          const { ok, data: d } = await api('devices', { method: 'POST', body: JSON.stringify({ app_id: selectedAppId, hwid: $('#mHwid').value, username: $('#mDevUser').value, ip: $('#mDevIp').value }) });
+          const dtype = $('#mDevType').value;
+          const { ok, data: d } = await api('devices', { method: 'POST', body: JSON.stringify({
+            app_id: selectedAppId, hwid: $('#mHwid').value, username: $('#mDevUser').value,
+            ip: $('#mDevIp').value, device_type: dtype,
+          }) });
           if (!ok) return toast(d.error || 'Failed', 'error');
           toast('Device added'); $('#modalRoot').innerHTML = ''; renderDevices();
         };
       };
+      $$('[data-unbind]').forEach((b) => b.onclick = async () => {
+        if (!confirm('Unbind/reset this device HWID?')) return;
+        const { ok } = await api('devices?id=' + encodeURIComponent(b.dataset.unbind) + '&app_id=' + encodeURIComponent(selectedAppId), { method: 'DELETE' });
+        if (ok) { toast('Device unbound'); renderDevices(navGen); }
+      });
       $$('[data-toggle-device]').forEach((b) => b.onclick = async () => {
         const { ok } = await api('devices', { method: 'PATCH', body: JSON.stringify({ app_id: selectedAppId, id: b.dataset.toggleDevice, status: b.dataset.status }) });
         if (ok) { toast('Updated'); renderDevices(); }
@@ -679,11 +783,13 @@
           <div class="field"><label>Level</label><input id="mSubLevel" type="number" value="1" /></div>
           <div class="field"><label>Duration (days)</label><input id="mSubDays" type="number" value="30" /></div>
           <div class="field"><label>Price</label><input id="mSubPrice" value="9.99" /></div>
+          <div class="field"><label>Feature Flags (comma-separated)</label><input id="mSubFeatures" placeholder="premium_support,hwid_lock,priority" /></div>
           <div class="modal-actions"><button class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" id="mSaveSub">Create</button></div></div>`);
         $('#mSaveSub').onclick = async () => {
           const { ok, data: d } = await api('subscriptions', { method: 'POST', body: JSON.stringify({
             app_id: selectedAppId, name: $('#mSubName').value, level: Number($('#mSubLevel').value),
             duration_days: Number($('#mSubDays').value), price: $('#mSubPrice').value,
+            features: ($('#mSubFeatures').value || '').split(',').map(s => s.trim()).filter(Boolean).join(','),
           }) });
           if (!ok) return toast(d.error || 'Failed', 'error');
           toast('Subscription created'); $('#modalRoot').innerHTML = ''; renderSubscriptions();
@@ -713,9 +819,14 @@
         showModal(`<div class="modal"><h2>New Variable</h2>
           <div class="field"><label>Key</label><input id="mVarKey" /></div>
           <div class="field"><label>Value</label><input id="mVarVal" /></div>
+          <label class="ax-toggle"><input type="checkbox" id="mVarSecret" /><span class="ax-toggle-slider"></span> Secret (masked)</label>
           <div class="modal-actions"><button class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" id="mVarSave">Save</button></div></div>`);
         $('#mVarSave').onclick = async () => {
-          const { ok, data: d } = await api('variables', { method: 'POST', body: JSON.stringify({ key: $('#mVarKey').value, value: $('#mVarVal').value }) });
+          const secret = $('#mVarSecret')?.checked;
+          const val = $('#mVarVal').value;
+          const { ok, data: d } = await api('variables', { method: 'POST', body: JSON.stringify({
+            key: $('#mVarKey').value, value: secret ? '***' + val.slice(-4) : val, secret,
+          }) });
           if (!ok) return toast(d.error || 'Failed', 'error');
           toast('Saved'); $('#modalRoot').innerHTML = ''; renderVariables();
         };
@@ -734,12 +845,17 @@
       const { data } = await api('sessions');
       const sessions = data.sessions || [];
       $('#pageContent').innerHTML = `
-        ${pageHead('sessions', `<span class="ax-badge">${sessions.length} ACTIVE</span>`, `<button class="btn btn-ghost btn-sm" id="refreshSessions">Refresh</button>`)}
+        ${pageHead('sessions', `<span class="ax-badge">${sessions.length} ACTIVE</span>`, `<button class="btn btn-ghost btn-sm" id="refreshSessions">Refresh</button><button class="btn btn-danger-ghost btn-sm" id="killAllSessions">Terminate All</button>`)}
         <div class="ax-panel"><table class="ax-table"><thead><tr><th>Session ID</th><th>IP</th><th>Created</th><th></th></tr></thead>
         <tbody>${sessions.map((s) => `<tr><td><code style="font-size:11px">${esc(s.id)}</code></td><td>${esc(s.ip || '—')}</td><td>${fmtDate(s.created_at)}</td>
           <td><button class="btn btn-danger-ghost btn-sm" data-del-session="${esc(s.id)}">Revoke</button></td></tr>`).join('') || '<tr><td colspan="4"><div class="ax-empty">No sessions</div></td></tr>'}
         </tbody></table></div>`;
-      $('#refreshSessions').onclick = () => renderSessions();
+      $('#refreshSessions').onclick = () => renderSessions(navGen);
+      $('#killAllSessions').onclick = async () => {
+        if (!confirm('Terminate ALL active sessions?')) return;
+        const { ok, data } = await api('sessions?all=1', { method: 'DELETE' });
+        if (ok) { toast('All sessions terminated (' + (data.deleted || 0) + ')'); renderSessions(navGen); }
+      };
       $$('[data-del-session]').forEach((b) => b.onclick = async () => {
         const { ok } = await api('sessions?id=' + encodeURIComponent(b.dataset.delSession), { method: 'DELETE' });
         if (ok) { toast('Revoked'); renderSessions(); }
@@ -753,8 +869,8 @@
       const { data } = await api('logs');
       const logs = data.logs || [];
       $('#pageContent').innerHTML = `
-        ${pageHead('logs', `<span class="ax-badge">${logs.length} TOTAL</span>`, `<button class="btn btn-ghost btn-sm" id="refreshLogs">Refresh</button>`)}
-        ${toolbar()}
+        ${pageHead('logs', `<span class="ax-badge">${logs.length} TOTAL</span>`, `<button class="btn btn-ghost btn-sm" id="refreshLogs">Refresh</button><button class="btn btn-ghost btn-sm" id="exportLogs">Export</button><button class="btn btn-danger-ghost btn-sm" id="deleteAllLogs">Delete All</button>`)}
+        ${toolbar(`<select id="logTypeFilter" style="padding:8px;background:var(--ax-panel);border:1px solid var(--ax-border);border-radius:8px;color:var(--ax-text)"><option value="">All Types</option>${[...new Set(logs.map(l => l.type))].map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select>`)}
         <div class="ax-panel"><table class="ax-table"><thead><tr><th>Type</th><th>Details</th><th>Time</th></tr></thead>
         <tbody id="logsBody">${logs.map((l) => {
           const details = { ...l }; delete details.type; delete details.at; delete details.id;
@@ -763,7 +879,19 @@
         }).join('') || '<tr><td colspan="3"><div class="ax-empty">No logs</div></td></tr>'}
         </tbody></table></div>`;
       bindToolbar((q) => $$('#logsBody tr[data-search]').forEach((tr) => { tr.style.display = !q || tr.dataset.search.includes(q) ? '' : 'none'; }));
-      $('#refreshLogs').onclick = () => renderLogs();
+      $('#refreshLogs').onclick = () => renderLogs(navGen);
+      $('#exportLogs').onclick = () => copyText(JSON.stringify(logs, null, 2));
+      $('#deleteAllLogs').onclick = async () => {
+        if (!confirm('Delete ALL logs permanently?')) return;
+        const { ok } = await api('logs?all=1', { method: 'DELETE' });
+        if (ok) { toast('All logs deleted'); renderLogs(navGen); }
+      };
+      $('#logTypeFilter')?.addEventListener('change', (e) => {
+        const t = e.target.value;
+        $$('#logsBody tr[data-search]').forEach((tr) => {
+          tr.style.display = !t || tr.dataset.search.includes(t.toLowerCase()) ? '' : 'none';
+        });
+      });
     } catch (err) { showLoadError(err.message); }
   }
 
@@ -1001,12 +1129,32 @@
         else if (type === 'resellers') fields = `<div class="field"><label>Name</label><input id="mName" /></div><div class="field"><label>Email</label><input id="mEmail" /></div><div class="field"><label>Commission %</label><input id="mCommission" value="10" /></div>`;
         else if (type === 'bots') fields = `<div class="field"><label>Name</label><input id="mName" /></div><div class="field"><label>Platform</label><select id="mPlatform"><option>Discord</option><option>Telegram</option></select></div><div class="field"><label>Bot Token</label><input id="mToken" /></div>`;
         else if (type === 'apikey') fields = `<div class="field"><label>Label</label><input id="mLabel" /></div>`;
-        else if (type === 'files') fields = `<div class="field"><label>File Name</label><input id="mName" /></div><div class="field"><label>URL</label><input id="mUrl" placeholder="https://..." /></div><div class="field"><label>Size</label><input id="mSize" placeholder="1.2 MB" /></div>`;
+        else if (type === 'files') fields = `<div id="fileDrop" style="border:2px dashed var(--ax-border);border-radius:12px;padding:40px;text-align:center;margin-bottom:16px;color:var(--ax-muted)">Drag & drop files here or click to browse<input type="file" id="fileInput" style="display:none" /></div><div class="field"><label>File Name</label><input id="mName" /></div><div class="field"><label>URL</label><input id="mUrl" placeholder="https://..." /></div><div class="field"><label>Size</label><input id="mSize" placeholder="1.2 MB" /></div>`;
+        else if (type === 'variables') fields = `<div class="field"><label>Key</label><input id="mVarKey" /></div><div class="field"><label>Value</label><input id="mVarVal" /></div><label class="ax-toggle"><input type="checkbox" id="mVarSecret" /><span class="ax-toggle-slider"></span> Secret (masked in client)</label>`;
         else if (type === 'chats') fields = `<div class="field"><label>User</label><input id="mUser" /></div><div class="field"><label>Message</label><textarea id="mMessage" rows="3"></textarea></div>`;
         else fields = `<div class="field"><label>Action</label><input id="mAction" /></div><div class="field"><label>User</label><input id="mUser" /></div><div class="field"><label>Details</label><input id="mDetails" /></div>`;
 
         showModal(`<div class="modal"><h2>New ${esc(label.replace(/s$/, ''))}</h2>${fields}
           <div class="modal-actions"><button class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" id="mTeamSave">Create</button></div></div>`);
+
+        if (type === 'files') {
+          const drop = $('#fileDrop');
+          const inp = $('#fileInput');
+          if (drop && inp) {
+            drop.onclick = () => inp.click();
+            drop.ondragover = (e) => { e.preventDefault(); drop.style.borderColor = 'var(--ax-blue)'; };
+            drop.ondragleave = () => { drop.style.borderColor = 'var(--ax-border)'; };
+            drop.ondrop = (e) => {
+              e.preventDefault();
+              const f = e.dataTransfer.files[0];
+              if (f) { $('#mName').value = f.name; $('#mSize').value = (f.size / 1024 / 1024).toFixed(2) + ' MB'; toast('File ready: ' + f.name); }
+            };
+            inp.onchange = () => {
+              const f = inp.files[0];
+              if (f) { $('#mName').value = f.name; $('#mSize').value = (f.size / 1024 / 1024).toFixed(2) + ' MB'; }
+            };
+          }
+        }
 
         $('#mTeamSave').onclick = async () => {
           const payload = { type };

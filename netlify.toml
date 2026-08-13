@@ -8,6 +8,11 @@
   external_node_modules = ["@netlify/blobs"]
 
 [[redirects]]
+  from = "/api/v1/*"
+  to = "/.netlify/functions/v1-router?endpoint=:splat"
+  status = 200
+
+[[redirects]]
   from = "/api/v2/*"
   to = "/.netlify/functions/v2-router?endpoint=:splat"
   status = 200
