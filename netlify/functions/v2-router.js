@@ -226,6 +226,163 @@ async function handleLogs(body) {
   return authlyxOk('Log recorded');
 }
 
+async function handleChangePassword(body) {
+  const session = await getSession(body.session_id);
+  if (!session) return authlyxFail(403, 'Invalid session');
+  const appId = session.app_id || 'default';
+  const username = String(body.username || '').trim().toLowerCase();
+  const oldPassword = String(body.old_password || '');
+  const newPassword = String(body.new_password || '');
+
+  if (!username || !oldPassword || !newPassword) return authlyxFail(400, 'Missing fields');
+
+  const users = await store('kernel-users');
+  const blobKey = userBlobKey(appId, username);
+  const user = await getJson(users, blobKey);
+
+  if (!user || user.password_hash !== oldPassword) {
+    return authlyxFail(401, 'Invalid credentials');
+  }
+
+  user.password_hash = newPassword;
+  user.updated_at = new Date().toISOString();
+  await setJson(users, blobKey, user);
+  await appendLog({ type: 'password_changed', app_id: appId, username });
+
+  return authlyxOk('Password changed successfully');
+}
+
+async function handleDeviceAuth(body, event) {
+  const session = await getSession(body.session_id);
+  if (!session) return authlyxFail(403, 'Invalid session');
+  const appId = session.app_id || 'default';
+  const hwid = String(body.hwid || body.sid || '').trim();
+  const ip = event.headers['x-forwarded-for'] || body.ip || '';
+  
+  if (!hwid) return authlyxFail(400, 'Missing HWID');
+
+  const devices = await store('kernel-devices');
+  const list = await devices.list();
+  
+  let found = false;
+  for (const item of list.blobs) {
+    if (!item.key.startsWith(appId + ':')) continue;
+    const d = await getJson(devices, item.key);
+    if (d && d.hwid === hwid) {
+      if (d.status === 'banned') return authlyxFail(403, 'Device is banned');
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    const id = crypto.randomUUID();
+    await setJson(devices, `${appId}:${id}`, {
+      id,
+      hwid,
+      ip,
+      app_id: appId,
+      status: 'active',
+      created_at: new Date().toISOString()
+    });
+    await appendLog({ type: 'device_registered', app_id: appId, hwid });
+  }
+
+  return authlyxOk('Device authorized', { authorized: true });
+}
+
+async function handleVariablesSet(body) {
+  const session = await getSession(body.session_id);
+  if (!session) return authlyxFail(403, 'Invalid session');
+  
+  const key = String(body.key || '').trim();
+  const value = String(body.value || '');
+  if (!key) return authlyxFail(400, 'Missing key');
+
+  const vars = await store('kernel-variables');
+  await setJson(vars, key, {
+    key,
+    value,
+    secret: body.secret || false,
+    updated_at: new Date().toISOString()
+  });
+
+  return authlyxOk('Variable saved');
+}
+
+async function handleChatsGet(body) {
+  const session = await getSession(body.session_id);
+  if (!session) return authlyxFail(403, 'Invalid session');
+
+  const s = await store('kernel-team');
+  const prefix = 'chats:';
+  const list = await s.list();
+  const items = [];
+  
+  for (const item of list.blobs.slice(0, 100)) {
+    if (!item.key.startsWith(prefix)) continue;
+    const row = await getJson(s, item.key);
+    if (row) items.push(row);
+  }
+  
+  items.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+  return authlyxOk('Chats loaded', { chats: items });
+}
+
+async function handleChatsSend(body) {
+  const session = await getSession(body.session_id);
+  if (!session) return authlyxFail(403, 'Invalid session');
+  
+  const message = String(body.message || '').trim();
+  const user = String(body.username || body.user || 'Unknown User');
+  if (!message) return authlyxFail(400, 'Message cannot be empty');
+
+  const s = await store('kernel-team');
+  const id = crypto.randomUUID();
+  const record = {
+    id,
+    user,
+    message,
+    created_at: new Date().toISOString()
+  };
+  
+  await setJson(s, `chats:${id}`, record);
+  return authlyxOk('Message sent', { chat: record });
+}
+
+async function handleBlacklistCheck(body, event) {
+  const session = await getSession(body.session_id);
+  if (!session) return authlyxFail(403, 'Invalid session');
+  const appId = session.app_id || 'default';
+  
+  const ip = event.headers['x-forwarded-for'] || body.ip || '';
+  const hwid = String(body.hwid || body.sid || '').trim();
+
+  const policiesStore = await store('kernel-policies');
+  const policies = await getJson(policiesStore, appId) || {};
+  
+  if (ip && (policies.ip_blacklist || []).includes(ip)) {
+    return authlyxFail(403, 'IP is blacklisted', { blacklisted: true, reason: 'IP' });
+  }
+  if (hwid && (policies.hwid_blacklist || []).includes(hwid)) {
+    return authlyxFail(403, 'HWID is blacklisted', { blacklisted: true, reason: 'HWID' });
+  }
+
+  if (hwid) {
+    const devices = await store('kernel-devices');
+    const list = await devices.list();
+    for (const item of list.blobs) {
+      if (!item.key.startsWith(appId + ':')) continue;
+      const d = await getJson(devices, item.key);
+      if (d && d.hwid === hwid && d.status === 'banned') {
+        return authlyxFail(403, 'Device is banned', { blacklisted: true, reason: 'Device Banned' });
+      }
+    }
+  }
+
+  return authlyxOk('Not blacklisted', { blacklisted: false });
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': '*' } };
@@ -246,13 +403,12 @@ exports.handler = async (event) => {
       case 'validate-session': return handleValidateSession(body);
       case 'variables': return handleVariables(body, event);
       case 'logs': return handleLogs(body);
-      case 'change-password':
-      case 'device-auth':
-      case 'variables/set':
-      case 'chats/get':
-      case 'chats/send':
-      case 'blacklist/check':
-        return authlyxOk('OK');
+      case 'change-password': return handleChangePassword(body);
+      case 'device-auth': return handleDeviceAuth(body, event);
+      case 'variables/set': return handleVariablesSet(body);
+      case 'chats/get': return handleChatsGet(body);
+      case 'chats/send': return handleChatsSend(body);
+      case 'blacklist/check': return handleBlacklistCheck(body, event);
       default:
         return authlyxFail(404, `Unknown v2 endpoint: ${endpoint || '(empty)'}`);
     }
