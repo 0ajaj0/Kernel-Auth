@@ -28,6 +28,7 @@
     { id: 'audit', icon: '📜', title: 'Audit Logs' },
     { id: 'staff', icon: '👥', title: 'Staff' },
     { id: 'resellers', icon: '🏪', title: 'Resellers' },
+    { id: 'invites', icon: '✉️', title: 'Invites' },
   ];
 
   const PAGE_META = {
@@ -51,6 +52,7 @@
     audit: { title: 'Audit Logs', desc: 'Team-level audit trail.' },
     staff: { title: 'Staff', desc: 'Manage staff members and permissions.' },
     resellers: { title: 'Resellers', desc: 'Reseller accounts and commission tracking.' },
+    invites: { title: 'Invites', desc: 'Manage invite codes.' },
   };
 
   let token = sessionStorage.getItem(STORAGE_KEY) || sessionStorage.getItem('kernel_admin_token') || '';
@@ -319,6 +321,7 @@
       audit: () => renderTeamPage('audit', 'Audit Logs', gen),
       staff: () => renderTeamPage('staff', 'Staff', gen),
       resellers: () => renderTeamPage('resellers', 'Resellers', gen),
+      invites: renderInvites,
     };
     try {
       await (renderers[page] || renderDashboard)(gen);
@@ -402,8 +405,30 @@
     ctx.clearRect(0, 0, w, 200);
 
     const buckets = range === 'today' ? 24 : range === 'week' ? 7 : range === 'month' ? 30 : 12;
-    const data = Array.from({ length: buckets }, () => Math.floor(Math.random() * 5) + (logs.length > 0 ? 1 : 0));
-    logs.forEach((_, i) => { if (i < buckets) data[i % buckets]++; });
+    const data = Array.from({ length: buckets }, () => 0);
+    const now = new Date();
+
+    (logs || []).forEach((log) => {
+      const d = new Date(log.at);
+      if (isNaN(d.getTime())) return;
+      const diffMs = now - d;
+      let bucket = -1;
+      
+      if (range === 'today' && diffMs <= 86400000) {
+        bucket = Math.floor(diffMs / 3600000);
+      } else if (range === 'week' && diffMs <= 86400000 * 7) {
+        bucket = Math.floor(diffMs / 86400000);
+      } else if (range === 'month' && diffMs <= 86400000 * 30) {
+        bucket = Math.floor(diffMs / 86400000);
+      } else if (range === 'all') {
+        const diffMonths = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
+        if (diffMonths >= 0 && diffMonths < 12) bucket = diffMonths;
+      }
+      
+      if (bucket >= 0 && bucket < buckets) {
+        data[buckets - 1 - bucket]++;
+      }
+    });
 
     const max = Math.max(...data, 1);
     const barW = (w - 40) / buckets;
@@ -1337,6 +1362,48 @@
     } catch (err) { showLoadError(err.message); }
   }
 
+  /* ── Invites ── */
+  async function renderInvites(gen = navGen) {
+    try {
+      const { ok, data } = await api('invites');
+      if (stale(gen)) return;
+      if (!ok) throw new Error(data.error || 'Failed');
+      const items = data.invites || [];
+
+      $('#pageContent').innerHTML = `
+        ${pageHead('invites', `<span class="ax-badge">${items.length} TOTAL</span>`, `<button class="btn btn-primary" id="addInviteBtn">+ New Invite</button>`)}
+        ${toolbar()}
+        <div class="ax-panel"><table class="ax-table"><thead><tr><th>Code</th><th>Uses</th><th>Created</th><th></th></tr></thead>
+        <tbody>${items.map((item) => `<tr><td><code>${esc(item.code)}</code></td><td>${item.uses} / ${item.max_uses}</td><td>${fmtDate(item.created_at)}</td>
+            <td><button class="btn btn-danger-ghost btn-sm" data-del-invite="${esc(item.code)}">Delete</button></td></tr>`).join('') || `<tr><td colspan="4"><div class="ax-empty">No invites yet</div></td></tr>`}
+        </tbody></table></div>`;
+
+      $('#addInviteBtn').onclick = () => {
+        showModal(`<div class="modal"><h2>New Invite</h2>
+          <div class="field"><label>Custom Code (Optional)</label><input id="mCode" placeholder="Leave empty to auto-generate" /></div>
+          <div class="field"><label>Max Uses</label><input type="number" id="mMaxUses" value="1" min="1" /></div>
+          <div class="modal-actions"><button class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" id="mSaveInvite">Create</button></div></div>`);
+
+        $('#mSaveInvite').onclick = async () => {
+          const body = { max_uses: $('#mMaxUses').value };
+          const code = $('#mCode').value.trim();
+          if (code) body.code = code;
+
+          const { ok, data: d } = await api('invites', { method: 'POST', body: JSON.stringify(body) });
+          if (!ok) return toast(d.error || 'Failed', 'error');
+          toast('Invite created'); $('#modalRoot').innerHTML = '';
+          renderInvites();
+        };
+      };
+
+      $$('[data-del-invite]').forEach((b) => b.onclick = async () => {
+        if (!confirm('Delete invite?')) return;
+        const { ok } = await api('invites?id=' + encodeURIComponent(b.dataset.delInvite), { method: 'DELETE' });
+        if (ok) { toast('Deleted'); renderInvites(); }
+      });
+    } catch (err) { showLoadError(err.message); }
+  }
+
   /* ── Auth ── */
   async function showApp() {
     $('#loginView').classList.add('hidden');
@@ -1409,7 +1476,11 @@
   $('#discordLoginBtn')?.addEventListener('click', () => startOAuth('discord'));
   $('#githubLoginBtn')?.addEventListener('click', () => startOAuth('github'));
   $('#logoutBtn').addEventListener('click', logout);
-  $('#linkInvites')?.addEventListener('click', (e) => { e.preventDefault(); toast('Invites coming soon — use Staff/Resellers for now'); });
+  $('#linkInvites')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (mode !== 'team') $('#modeTeam').click();
+    navigate('invites');
+  });
   $('#linkSupport')?.addEventListener('click', (e) => { e.preventDefault(); window.open('https://discord.com', '_blank'); });
 
   $('#modeApp').addEventListener('click', () => {

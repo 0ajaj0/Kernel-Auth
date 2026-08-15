@@ -137,10 +137,26 @@
 
   const contactForm = document.getElementById('contactForm');
   if (contactForm) {
-    contactForm.addEventListener('submit', (e) => {
+    contactForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      toast('Message sent! We will reply within 24 hours.');
-      contactForm.reset();
+      const btn = contactForm.querySelector('button[type="submit"]');
+      if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+      try {
+        const formData = new FormData(contactForm);
+        const body = Object.fromEntries(formData.entries());
+        const res = await fetch('/api/contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error('Failed to send');
+        toast('Message sent! We will reply within 24 hours.');
+        contactForm.reset();
+      } catch (err) {
+        toast('Error sending message. Please try again.');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Send Message'; }
+      }
     });
   }
 
