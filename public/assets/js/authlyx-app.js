@@ -775,7 +775,7 @@
   }
 
   /* ── Licenses ── */
-  async function renderLicenses() {
+  async function renderLicenses(gen = navGen) {
     try {
       await loadApps();
       const cacheKey = 'licenses:' + selectedAppId;
@@ -866,7 +866,7 @@
   }
 
   /* ── Devices ── */
-  async function renderDevices() {
+  async function renderDevices(gen = navGen) {
     try {
       await loadApps();
       const { ok, data } = await api('devices?app_id=' + encodeURIComponent(selectedAppId));
@@ -941,7 +941,7 @@
   }
 
   /* ── Subscriptions ── */
-  async function renderSubscriptions() {
+  async function renderSubscriptions(gen = navGen) {
     try {
       await loadApps();
       const { ok, data } = await api('subscriptions?app_id=' + encodeURIComponent(selectedAppId));
@@ -985,7 +985,7 @@
   }
 
   /* ── Variables ── */
-  async function renderVariables() {
+  async function renderVariables(gen = navGen) {
     try {
       const { data } = await api('variables');
       const vars = data.variables || [];
@@ -1021,7 +1021,7 @@
   }
 
   /* ── Sessions ── */
-  async function renderSessions() {
+  async function renderSessions(gen = navGen) {
     try {
       const { data } = await api('sessions');
       const sessions = data.sessions || [];
@@ -1045,7 +1045,7 @@
   }
 
   /* ── Logs ── */
-  async function renderLogs() {
+  async function renderLogs(gen = navGen) {
     try {
       const { data } = await api('logs');
       const logs = data.logs || [];
@@ -1150,7 +1150,7 @@
   }
 
   /* ── Social Auth ── */
-  async function renderSocial() {
+  async function renderSocial(gen = navGen) {
     try {
       if (!config) { const c = await api('config'); if (c.ok) config = c.data; }
       const oauth = config.oauth || {};
@@ -1188,7 +1188,7 @@
   }
 
   /* ── Settings ── */
-  async function renderSettings() {
+  async function renderSettings(gen = navGen) {
     try {
       await loadApps();
       const app = selectedApp();
@@ -1407,6 +1407,7 @@
   /* ── Auth ── */
   async function showApp() {
     $('#loginView').classList.add('hidden');
+    if ($('#loadingView')) $('#loadingView').classList.add('hidden');
     $('#appView').classList.remove('hidden');
     updateUserUI();
     try { await loadApps(); } catch { apps = []; }
@@ -1422,6 +1423,7 @@
     sessionStorage.removeItem('kernel_auth_role');
     sessionStorage.removeItem(PROFILE_KEY);
     $('#appView').classList.add('hidden');
+    if ($('#loadingView')) $('#loadingView').classList.add('hidden');
     $('#loginView').classList.remove('hidden');
   }
 
