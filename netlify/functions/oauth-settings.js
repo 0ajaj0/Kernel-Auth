@@ -9,6 +9,15 @@ exports.handler = async (event) => {
   try {
     initBlobs(event);
 
+    const token = (event.headers.authorization || '').replace('Bearer ', '');
+    const { verifyToken, ROLES } = require('./_auth');
+    try {
+      const decoded = await verifyToken(token);
+      if (!decoded || decoded.role !== ROLES.ADMIN) throw new Error('Unauthorized');
+    } catch (err) {
+      return json(401, { error: 'Unauthorized: Admin access required' });
+    }
+
     if (event.httpMethod === 'GET') {
       const settings = await getOAuthSettings();
       // Mask the secrets when sending to frontend for security

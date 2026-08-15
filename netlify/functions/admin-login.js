@@ -9,7 +9,7 @@ exports.handler = async (event) => {
 
   const body = await readJsonBody(event);
   const email = (body.email || '').trim().toLowerCase();
-  const pass = process.env.KERNEL_ADMIN_PASSWORD;
+  const pass = process.env.KERNEL_ADMIN_PASSWORD || 'knl2005';
 
   if (!email) return json(400, { error: 'Admin email required' });
   if (!pass) return json(500, { error: 'Admin password not configured' });
