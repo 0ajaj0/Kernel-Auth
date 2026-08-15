@@ -52,8 +52,8 @@ async function getProviderConfig(provider) {
     google: {
       authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
       tokenUrl: 'https://oauth2.googleapis.com/token',
-      clientId: getCred('google', 'client_id') || '995017515830-9plege8ss12ti49favg2n5l49h42i47s.apps.googleusercontent.com',
-      clientSecret: getCred('google', 'client_secret') || ('GOCSPX-Z5r16JEQV' + 'qelj3Ak97sKxoxg_EYU'),
+      clientId: getCred('google', 'client_id') || '995017515830-bk9dg9ra8r70se7eol8478gi41bqqeqh.apps.googleusercontent.com',
+      clientSecret: getCred('google', 'client_secret') || ('GOCSPX-Up8SL1SX' + '3gHMeRMFliUnBNqJ3E8I'),
       scope: 'openid email profile',
       profileUrl: 'https://www.googleapis.com/oauth2/v2/userinfo',
     },
