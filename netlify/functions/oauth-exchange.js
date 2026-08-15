@@ -1,7 +1,7 @@
-const { json, providerConfig, netlifyCallback, readJsonBody, parseProfile } = require('./_shared');
+const { json, getProviderConfig, netlifyCallback, readJsonBody, parseProfile } = require('./_shared');
 
 async function exchangeCode(provider, code) {
-  const cfg = providerConfig(provider);
+  const cfg = await getProviderConfig(provider);
   if (!cfg?.clientId || !cfg?.clientSecret) {
     throw new Error(`${provider} OAuth is not configured`);
   }

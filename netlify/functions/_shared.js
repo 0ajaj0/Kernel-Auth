@@ -30,29 +30,46 @@ function loaderCallback() {
   return env('KERNEL_LOADER_CALLBACK', 'http://127.0.0.1:42891/callback');
 }
 
-function providerConfig(provider) {
+async function getOAuthSettings() {
+  const { getStore } = require('@netlify/blobs');
+  try {
+    const store = getStore('kernel-settings');
+    const data = await store.get('oauth');
+    return data ? JSON.parse(data) : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+async function getProviderConfig(provider) {
+  const dbSettings = await getOAuthSettings();
+  
+  function getCred(providerId, fieldName) {
+    return dbSettings[providerId]?.[fieldName] || env(`${providerId.toUpperCase()}_${fieldName.toUpperCase()}`);
+  }
+
   const map = {
     google: {
       authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
       tokenUrl: 'https://oauth2.googleapis.com/token',
-      clientId: env('GOOGLE_CLIENT_ID'),
-      clientSecret: env('GOOGLE_CLIENT_SECRET'),
+      clientId: getCred('google', 'client_id'),
+      clientSecret: getCred('google', 'client_secret'),
       scope: 'openid email profile',
       profileUrl: 'https://www.googleapis.com/oauth2/v2/userinfo',
     },
     discord: {
       authUrl: 'https://discord.com/api/oauth2/authorize',
       tokenUrl: 'https://discord.com/api/oauth2/token',
-      clientId: env('DISCORD_CLIENT_ID'),
-      clientSecret: env('DISCORD_CLIENT_SECRET'),
+      clientId: getCred('discord', 'client_id'),
+      clientSecret: getCred('discord', 'client_secret'),
       scope: 'identify email',
       profileUrl: 'https://discord.com/api/users/@me',
     },
     github: {
       authUrl: 'https://github.com/login/oauth/authorize',
       tokenUrl: 'https://github.com/login/oauth/access_token',
-      clientId: env('GITHUB_CLIENT_ID'),
-      clientSecret: env('GITHUB_CLIENT_SECRET'),
+      clientId: getCred('github', 'client_id'),
+      clientSecret: getCred('github', 'client_secret'),
       scope: 'read:user user:email',
       profileUrl: 'https://api.github.com/user',
     },
@@ -134,7 +151,8 @@ module.exports = {
   env,
   siteUrl,
   loaderCallback,
-  providerConfig,
+  getProviderConfig,
+  getOAuthSettings,
   netlifyCallback,
   readJsonBody,
   parseProfile,

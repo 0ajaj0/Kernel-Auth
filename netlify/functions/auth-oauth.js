@@ -1,10 +1,10 @@
-const { json, readJsonBody, initBlobs, providerConfig, netlifyCallback, parseProfile, sendDiscordWebhook } = require('./_shared');
+const { json, readJsonBody, initBlobs, getProviderConfig, netlifyCallback, parseProfile, sendDiscordWebhook } = require('./_shared');
 const { store, getJson, setJson, appendLog } = require('./_store');
 const { ROLES, signToken, parseOAuthState } = require('./_auth');
 const { loadPlans, applySubscription, checkAccountActive } = require('./_plans');
 
 async function exchangeCode(provider, code) {
-  const cfg = providerConfig(provider);
+  const cfg = await getProviderConfig(provider);
   if (!cfg?.clientId || !cfg?.clientSecret) {
     throw new Error(`${provider} OAuth is not configured`);
   }

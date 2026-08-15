@@ -1153,7 +1153,10 @@
   async function renderSocial(gen = navGen) {
     try {
       if (!config) { const c = await api('config'); if (c.ok) config = c.data; }
-      const oauth = config.oauth || {};
+      
+      const { data: dbSettings } = await api('oauth-settings');
+      const oauth = dbSettings || {};
+      
       const callback = config.site_url + '/oauth/callback.html';
       const providers = [
         { id: 'google', name: 'Google', cls: 'google', letter: 'G' },
@@ -1163,24 +1166,86 @@
 
       $('#pageContent').innerHTML = `
         ${pageHead('social', `<span class="ax-badge green">OAuth Ready</span>`)}
+        
+        <div class="ax-panel" style="padding:20px; margin-bottom:20px;">
+          <h3 style="margin-bottom:12px;font-size:16px;">OAuth Configuration</h3>
+          <p style="font-size:13px;color:var(--ax-muted);margin-bottom:20px;">
+            Set your Client ID and Client Secret below. Changes are saved to the database immediately. <br/>
+            <strong>Redirect URI:</strong> <code>${callback}</code>
+          </p>
+          
+          <div id="oauthFormContainer" style="display:flex; flex-direction:column; gap:20px;">
+            ${providers.map((p) => {
+              const currentId = oauth[p.id]?.client_id || '';
+              const currentSecret = oauth[p.id]?.client_secret || '';
+              return `
+                <div class="oauth-config-card" style="border:1px solid var(--ax-border); border-radius:10px; padding:16px;">
+                  <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+                    <div class="oauth-icon ${p.cls}">${p.letter}</div>
+                    <strong style="font-size:15px;">${p.name}</strong>
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                    <div>
+                      <label style="display:block;font-size:12px;color:var(--ax-muted);margin-bottom:6px;">Client ID</label>
+                      <input type="text" id="clientId_${p.id}" class="ax-input" placeholder="Client ID" value="${currentId}" style="width:100%" />
+                    </div>
+                    <div>
+                      <label style="display:block;font-size:12px;color:var(--ax-muted);margin-bottom:6px;">Client Secret</label>
+                      <input type="password" id="clientSecret_${p.id}" class="ax-input" placeholder="Client Secret" value="${currentSecret}" style="width:100%" />
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+          <div style="margin-top:20px;text-align:right;">
+            <button id="btnSaveOauth" class="btn btn-primary">Save Configuration</button>
+          </div>
+        </div>
+
         <div class="ax-panel" style="padding:20px">
+          <h3 style="margin-bottom:16px;font-size:16px;">Test Providers</h3>
           ${providers.map((p) => {
-            const enabled = oauth[p.id]?.enabled;
+            const enabled = !!oauth[p.id]?.client_id;
             return `<div class="oauth-card">
               <div class="oauth-icon ${p.cls}">${p.letter}</div>
               <div style="flex:1"><strong>${p.name}</strong>
                 <div style="font-size:12px;color:var(--ax-muted);margin-top:4px">${enabled ? '<span class="ax-badge green">Configured</span>' : '<span class="ax-badge">Not configured</span>'}</div></div>
-              <button class="btn btn-ghost btn-sm" data-test-oauth="${p.id}" ${enabled ? '' : 'disabled'}>Test Flow</button>
+              <button class="btn btn-ghost" data-test-oauth="${p.id}">Test Flow</button>
             </div>`;
           }).join('')}
         </div>
-        <div class="ax-panel" style="padding:20px;margin-top:16px">
           <h3 style="margin-bottom:12px">Redirect URI</h3>
           <div class="cred-box">${esc(callback)}<button class="btn btn-ghost btn-sm" data-copy="${esc(callback)}" style="margin-top:8px">Copy</button></div>
           <p style="font-size:12px;color:var(--ax-muted);margin-top:12px">Loader callback: ${esc(config.loader_callback)}</p>
         </div>`;
 
       bindCopy();
+      
+      const btnSave = $('#btnSaveOauth');
+      if (btnSave) {
+        btnSave.onclick = async () => {
+          const payload = {};
+          providers.forEach(p => {
+            const cid = document.getElementById(`clientId_${p.id}`)?.value.trim();
+            const sec = document.getElementById(`clientSecret_${p.id}`)?.value.trim();
+            if (cid || sec) {
+              payload[p.id] = { client_id: cid, client_secret: sec };
+            }
+          });
+          const { ok, message } = await api('oauth-settings', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
+          if (ok) {
+            toast(message || 'Saved successfully');
+            renderSocial();
+          } else {
+            toast(message || 'Failed to save', 'error');
+          }
+        };
+      }
+
       $$('[data-test-oauth]').forEach((b) => b.onclick = () => {
         window.open('/api/oauth-start?provider=' + b.dataset.testOauth + '&state=test-' + Math.random().toString(36).slice(2), '_blank');
       });

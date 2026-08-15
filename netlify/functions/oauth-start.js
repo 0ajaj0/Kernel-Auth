@@ -1,4 +1,4 @@
-const { json, providerConfig, netlifyCallback } = require('./_shared');
+const { json, getProviderConfig, netlifyCallback } = require('./_shared');
 const { ROLES, buildOAuthState } = require('./_auth');
 
 exports.handler = async (event) => {
@@ -15,7 +15,7 @@ exports.handler = async (event) => {
     state = buildOAuthState(role, provider);
   }
 
-  const cfg = providerConfig(provider);
+  const cfg = await getProviderConfig(provider);
 
   if (!cfg || !cfg.clientId) {
     const isWeb = state.startsWith('kernel:') || (state && state.startsWith('dashboard-'));
